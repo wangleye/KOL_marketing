@@ -9,7 +9,7 @@ def save_hit_users_to_db(item, group, hit_users, alpha):
 	x = conn.cursor()
 	x.execute(insert_statement)
 
-def simulate_hit_users_monte_carlo(items, group_users, sim_dict, K, proc_id):
+def simulate_hit_users_monte_carlo(items, group_users, alpha, sim_dict, K, proc_id):
 	global conn, USER_FRIENDS
 	conn = pymysql.connect(host='127.0.0.1',
 		user='root',
@@ -37,7 +37,6 @@ def simulate_hit_users_monte_carlo(items, group_users, sim_dict, K, proc_id):
 	logger.info('staring a new simulation, proc_id: {}, simulation_times: {}, group_num: {}, item_num: {}'.format(proc_id, K, len(group_users), len(items)))
 
 	count_finish_pair = 0
-	alpha = 0.02
 	for (item, group) in rec_pairs:
 		count_finish_pair += 1
 		cache_hit_users[(item,group)] = []

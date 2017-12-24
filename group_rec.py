@@ -30,7 +30,7 @@ SLOTS = np.ones(TOTAL_GROUP_NUM) # set slot constraint to one for all the groups
 BUDGET = 1
 COST_TYPE = 'num' # 'net' or 'num'
 
-alpha = 0.02 # when simulating hit, it is no use: please change the alpha setting in simulate_hit_pp.py
+alpha = 0.04
 epsilon = 0.1
 
 DATA_DIR = './facebook'
@@ -431,7 +431,7 @@ if __name__ == '__main__':
 	k_worker = 125
 	# n_worker * k_worker is the number of simulations for each (item, group) pair
 	dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-	jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+	jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
 	for i in range(n_worker*k_worker):
 		CACHE_HIT_USERS[i] = {}
 	i = 0
