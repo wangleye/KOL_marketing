@@ -62,7 +62,6 @@ def load_groups():
 	global GROUPS
 	GROUPS = random.sample(range(TOTAL_GROUP_NUM), TEST_GROUP_NUM)
 
-
 def load_items():
 	"""
 	read item list from file
@@ -136,29 +135,6 @@ def load_group_users_and_csd():
 				GROUP_CSD.append(float(line.strip()))
 	GROUP_CSD = GROUP_CSD[0:TOTAL_GROUP_NUM]
 
-
-def get_similarity(user, item):
-	if user not in SIM or item not in SIM[item1]:
-		return 0
-	return SIM[user][item]
-
-def liked_items(user_id):
-	if user_id in USER_ITEMS:
-		return USER_ITEMS[user_id]
-	# read from DB
-	query_statement = "SELECT moviestr FROM user WHERE iduser = '{}'".format(user_id)
-	x = conn.cursor()
-	x.execute(query_statement)
-	results = x.fetchall()
-	if len(results) == 0:
-		# print 'user {} not found in DB!!!'.format(user_id)
-		return set()
-	else:
-		moviestr = results[0][0]
-		moviestr_items = moviestr.split(';')
-		USER_ITEMS[user_id] = moviestr_items
-		return moviestr_items
-
 def set2key(s):
 	"""
 	change a set to string key
@@ -207,67 +183,6 @@ def utility_monte_carlo(rec_pairs):
 	CACHE_UTILITY[set2key(rec_pairs)] = utility
 
 	return utility
-
-
-def friends(user_id):
-	"""
-	return the friends' ids of a user
-	"""
-	if user_id in USER_FRIENDS:
-		return USER_FRIENDS[user_id]
-	# read from DB
-	query_statement = "SELECT friendstr FROM user WHERE iduser = '{}'".format(user_id)
-	x = conn.cursor()
-	x.execute(query_statement)
-	results = x.fetchall()
-	if len(results) == 0:
-		# print 'user {} not found in DB!!!'.format(user_id)
-		return set()
-	else:
-		friendstr = results[0][0]
-		friend_ids = friendstr.split(';')
-		USER_FRIENDS[user_id] = friend_ids
-		return friend_ids
-
-def sim_to_hit_prob(sim):
-	# learned logistic / isonotic function
-	return 1.0/(1.0+math.exp(-(-3.559+1.084*sim)))
-
-# store the hit users calculated before
-def sim_hit_users(item, group):
-	"""
-	simulation to get hit users for calculating utility
-	"""
-	hit_users = set()
-	share_users = set()
-	# hit users in group
-	for u in GROUP_USERS[group]:
-		sim = get_similarity(u, item)
-		hit_u_p = sim_to_hit_prob(sim)
-		if (random.random()<=hit_u_p):
-			hit_users.add(u)
-			if (random.random()<=alpha):
-				share_users.add(u)
-
-	# hit users through social influcence
-	while len(share_users) > 0:
-		new_share_users = set()
-		for u in share_users:
-			for f in friends(u):
-				sim = get_similarity(f, item)
-				hit_f_p = sim_to_hit_prob(sim)
-				if (random.random()<=hit_f_p):
-					hit_users.add(f)
-					if (random.random()<=alpha):
-						new_share_users.add(f)
-		share_users = new_share_users
-	return hit_users
-
-def get_weight(item):
-	"""
-	popular items with less weight
-	"""
-	return 1.0/(ITEMS_COUNT[item]**0.5) # according to item-based top n recommendation
 
 def find_max_utility(groups, items, costs, rho=0):
 	max_utility = 0
