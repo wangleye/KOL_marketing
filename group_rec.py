@@ -81,12 +81,10 @@ def load_user_item_similarity():
 	"""
 	read an item similarity file
 	"""
-	# global SIM
-	# SIM = np.loadtxt('{}/item_similarity'.format(DATA_DIR)) # read item similarity from files
-	read_item_similarity_file_line_by_line()
+	read_user_item_similarity_file_line_by_line()
 
 
-def read_item_similarity_file_line_by_line():
+def read_user_item_similarity_file_line_by_line():
 	global SIM
 	with open("{}/user_item_aff_score_relationship_between_50000_users_100_item".format(DATA_DIR)) as inputfile:
 		first_line = True
@@ -420,7 +418,7 @@ if __name__ == '__main__':
 	start = time.clock()
 	load_group_users_and_csd()
 	load_group_costs()
-	load_item_similarity()
+	load_user_item_similarity()
 	load_items()
 	load_groups()
 	initialize_finished = time.clock()
