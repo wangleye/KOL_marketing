@@ -14,8 +14,8 @@ conn = pymysql.connect(host='127.0.0.1',
 
 TOTAL_GROUP_NUM = 50
 
-TEST_ITEM_NUM = 40 # the number of items used in the test
-TEST_GROUP_NUM = 20 # the number of groups used in the test
+TEST_ITEM_NUM = 100 # the number of items used in the test
+TEST_GROUP_NUM = 50 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = []
