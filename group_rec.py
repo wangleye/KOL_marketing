@@ -3,10 +3,9 @@ import numpy as np
 import pymysql
 import time
 import math
-# import pp
-# import simulate_hit_pp as sh
+import pp
+import simulate_hit_pp as sh
 import logging
-# from joblib import Parallel, delayed
 
 conn = pymysql.connect(host='127.0.0.1',
 	user='root',
@@ -29,7 +28,7 @@ USER_ITEMS = {}
 USER_FRIENDS = {}
 SLOTS = np.ones(TOTAL_GROUP_NUM) # set slot constraint to one for all the groups
 BUDGET = 1
-COST_TYPE = 'net' # 'net' or 'num'
+COST_TYPE = 'num' # 'net' or 'num'
 
 alpha = 0.02 # when simulating hit, it is no use: please change the alpha setting in simulate_hit_pp.py
 epsilon = 0.1
@@ -79,7 +78,7 @@ def load_items():
 	ITEMS = random.sample(ITEMS_TOP_100, TEST_ITEM_NUM)
 
 
-def load_item_similarity():
+def load_user_item_similarity():
 	"""
 	read an item similarity file
 	"""
@@ -90,23 +89,22 @@ def load_item_similarity():
 
 def read_item_similarity_file_line_by_line():
 	global SIM
-	with open("{}/item_similarity".format(DATA_DIR)) as inputfile:
+	with open("{}/user_item_aff_score_relationship_between_50000_users_100_item".format(DATA_DIR)) as inputfile:
+		first_line = True
 		for line in inputfile:
+			if first_line:
+				first_line = False # skip the first line
+				continue
 			line = line.strip()
 			if len(line) > 0:
 				words = line.split()
-				item1 = words[0]
-				item2 = words[1]
+				user = words[0]
+				item = words[1]
 				similarity = float(words[2])
 
-				if item1 not in SIM:
-					SIM[item1] = {}
-				SIM[item1][item2] = similarity
-
-	# for i in ITEMS:
-	# 	for j in ITEMS:
-	# 		print SIM[i][j]
-
+				if user not in SIM:
+					SIM[user] = {}
+				SIM[user][item] = similarity
 
 def load_group_costs():
 	"""
@@ -139,10 +137,10 @@ def load_group_users_and_csd():
 	GROUP_CSD = GROUP_CSD[0:TOTAL_GROUP_NUM]
 
 
-def get_similarity(item1, item2):
-	if item1 not in SIM or item2 not in SIM[item1]:
+def get_similarity(user, item):
+	if user not in SIM or item not in SIM[item1]:
 		return 0
-	return SIM[item1][item2]
+	return SIM[user][item]
 
 def liked_items(user_id):
 	if user_id in USER_ITEMS:
@@ -160,17 +158,6 @@ def liked_items(user_id):
 		moviestr_items = moviestr.split(';')
 		USER_ITEMS[user_id] = moviestr_items
 		return moviestr_items
-
-# def load_user_items():
-# 	"""
-# 	return items of each user
-# 	"""
-# 	global USER_ITEMS
-# 	with open("{}/user_items".format(DATA_DIR)) as inputfile:
-# 		for line in inputfile:
-# 			if len(line.strip()) > 0:
-# 				items = line.split()
-# 				USER_ITEMS.append(map(int,items))
 
 def set2key(s):
 	"""
@@ -244,8 +231,7 @@ def friends(user_id):
 
 def sim_to_hit_prob(sim):
 	# learned logistic / isonotic function
-	# return sim/10.0 # directly return sim (JUST FOR TEST)
-	return 1.0/(1.0+math.exp(-(-6.18768+5.37923*sim)))
+	return 1.0/(1.0+math.exp(-(-3.559+1.084*sim)))
 
 # store the hit users calculated before
 def sim_hit_users(item, group):
@@ -256,7 +242,7 @@ def sim_hit_users(item, group):
 	share_users = set()
 	# hit users in group
 	for u in GROUP_USERS[group]:
-		sim = similarity(item, u)
+		sim = get_similarity(u, item)
 		hit_u_p = sim_to_hit_prob(sim)
 		if (random.random()<=hit_u_p):
 			hit_users.add(u)
@@ -268,7 +254,7 @@ def sim_hit_users(item, group):
 		new_share_users = set()
 		for u in share_users:
 			for f in friends(u):
-				sim = similarity(item, f)
+				sim = get_similarity(f, item)
 				hit_f_p = sim_to_hit_prob(sim)
 				if (random.random()<=hit_f_p):
 					hit_users.add(f)
@@ -282,20 +268,6 @@ def get_weight(item):
 	popular items with less weight
 	"""
 	return 1.0/(ITEMS_COUNT[item]**0.5) # according to item-based top n recommendation
-
-
-def similarity(item, user):
-	"""
-	similarity between an item and a user (a set of items)
-	"""
-	s = 0.0
-	prob = 1.0
-	user_items = liked_items(user)
-	for item2 in user_items:
-		s += get_similarity(item, item2)
-		prob *= (1-get_similarity(item, item2))
-	#return s
-	return 1-prob
 
 def find_max_utility(groups, items, costs, rho=0):
 	max_utility = 0
@@ -313,7 +285,6 @@ def sum_cost(costs, selected_pairs):
 	for (i, g) in selected_pairs:
 		sum_c += costs[g]
 	return sum_c
-
 
 def find_max_utility_increase(groups, items, costs, slots, selected_pairs):
 	remain_cost = 1 - sum_cost(costs, selected_pairs)
@@ -540,23 +511,23 @@ if __name__ == '__main__':
 	initialize_finished = time.clock()
 	print 'initialization finished: ', initialize_finished - start, ' seconds'
 
-	# print 'start simulation in parallel'
-	# ppservers = ()
-	# n_worker = 8
-	# job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
-	# k_worker = 125
-	# # n_worker * k_worker is the number of simulations for each (item, group) pair
-	# dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.get_similarity, sh.liked_items, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-	# jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
-	# for i in range(n_worker*k_worker):
-	# 	CACHE_HIT_USERS[i] = {}
-	# i = 0
-	# for job in jobs:
-	# 	hit_users = job()
-	# 	for rec_pair in hit_users:
-	# 		for j in range(i*k_worker, (i+1)*k_worker):
-	# 			CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
-	# 	i += 1
+	print 'start simulation in parallel'
+	ppservers = ()
+	n_worker = 8
+	job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
+	k_worker = 125
+	# n_worker * k_worker is the number of simulations for each (item, group) pair
+	dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
+	jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+	for i in range(n_worker*k_worker):
+		CACHE_HIT_USERS[i] = {}
+	i = 0
+	for job in jobs:
+		hit_users = job()
+		for rec_pair in hit_users:
+			for j in range(i*k_worker, (i+1)*k_worker):
+				CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
+		i += 1
 
 	print 'load simulation user hits'
 	load_simulated_hits()
