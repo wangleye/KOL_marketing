@@ -88,15 +88,22 @@ def get_item_similarity(item1, item2):
         return 0
     return ITEM_SIM[item1][item2]
 
-def user_item_affinity(user_id, target_item):
+def user_item_affinity(user_id, target_item, indirect_friend=True): #indirect_friends: whether consider indirect friends
     score = 0
     for item in ITEM_SET:
         if item in USER_PREF[user_id]:
             score += get_item_similarity(target_item, item)
 
-    for friend in USER_SET:
-        if friend in USER_RELATION[user_id] and target_item in USER_PREF[friend]:
+    for friend in USER_RELATION[user_id]:
+        if friend in USER_PREF and target_item in USER_PREF[friend]:
             score += calculate_user_similairity(user_id, friend)
+
+        # if counting indirect friends
+        if indirect_friend and (friend in USER_RELATION):
+            friends_of_f = USER_RELATION[friend]
+            for friend_of_f in friends_of_f:
+                if (friend_of_f in USER_PREF) and (friend_of_f not in USER_RELATION[user_id]) and target_item in USER_PREF[friend_of_f]:
+                    score += calculate_user_similairity(user_id, friend) * calculate_user_similairity(friend, friend_of_f)
     return score
 
 def output_user_item_aff():
