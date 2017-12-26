@@ -107,7 +107,7 @@ def user_item_affinity(user_id, target_item, indirect_friend=True): #indirect_fr
     return score
 
 def output_user_item_aff():
-    with open("user_item_aff_score_100_item_50000_relation.csv", "w") as outputfile:
+    with open("user_item_aff_score_100_item_50000_relation+indirect_friends.csv", "w") as outputfile:
         outputfile.write('user item score truth\n')
         for user in USER_SET:
             for item in ITEM_SET:
