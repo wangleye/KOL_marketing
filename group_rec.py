@@ -12,7 +12,7 @@ conn = pymysql.connect(host='127.0.0.1',
 	passwd='123456',
 	db='all0504')
 
-TOTAL_GROUP_NUM = 50
+TOTAL_GROUP_NUM = 100
 
 TEST_ITEM_NUM = 100 # the number of items used in the test
 TEST_GROUP_NUM = 50 # the number of groups used in the test
@@ -66,6 +66,7 @@ def load_simulated_hits():
 		j += 1
 
 def load_groups():
+	global GROUPS
 	GROUPS = random.sample(GROUP_USERS.keys(), TEST_GROUP_NUM)
 
 def load_items():
