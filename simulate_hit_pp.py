@@ -38,6 +38,7 @@ def simulate_hit_users_monte_carlo(items, group_users, alpha, sim_dict, K, proc_
 
 	count_finish_pair = 0
 	for (item, group) in rec_pairs:
+		logger.info("simulating ({},{})...".format(item, group))
 		count_finish_pair += 1
 		cache_hit_users[(item,group)] = []
 		start = time.clock()
@@ -88,16 +89,19 @@ def sim_hit_users(item, users_in_group, sim_dict, alpha):
 	# hit users in group
 	for u in users_in_group:
 		sim = similarity(item, u, sim_dict)
-		hit_u_p = sim_to_hit_prob(sim)
-		if (random.random()<=hit_u_p):
-			hit_users.add(u)
-			if (random.random()<=alpha):
-				share_users.add(u)
+		if sim > 0:
+			hit_u_p = sim_to_hit_prob(sim)
+			if (random.random()<=hit_u_p):
+				hit_users.add(u)
+				if (random.random()<=alpha):
+					share_users.add(u)
 
 	# hit users through social influcence
 	while len(share_users) > 0:
 		new_share_users = set()
 		for u in share_users:
+			if u in hit_users:
+				continue
 			for f in friends(u):
 				sim = similarity(item, f, sim_dict)
 				hit_f_p = sim_to_hit_prob(sim)
