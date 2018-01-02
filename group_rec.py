@@ -20,6 +20,8 @@ TEST_GROUP_NUM = 50 # the number of groups used in the test
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
 GROUP_CSD = {}
+USER_NUM_COSTS = {}
+NET_COSTS = {}
 COSTS = {}
 GROUPS = []
 ITEMS = []
@@ -111,14 +113,26 @@ def load_group_costs():
 	return group costs from file
 	"""
 	global COSTS
-	COSTS = {}
-	with open("{}/KOL_{}_cost".format(DATA_DIR, COST_TYPE)) as inputfile:
+	with open("{}/KOL_number_cost".format(DATA_DIR)) as inputfile:
 		for line in inputfile:
 			if len(line.strip()) > 0:
 				words = line.strip().split(';')
 				group_id = words[0]
 				normalized_cost = float(words[1])/BUDGET
-				COSTS[group_id] = normalized_cost
+				USER_NUM_COSTS[group_id] = normalized_cost
+
+	with open("{}/KOL_net_cost".format(DATA_DIR)) as inputfile:
+		for line in inputfile:
+			if len(line.strip()) > 0:
+				words = line.strip().split(';')
+				group_id = words[0]
+				normalized_cost = float(words[1])/BUDGET
+				NET_COSTS[group_id] = normalized_cost
+
+	if COST_TYPE == 'num':
+		COSTS = USER_NUM_COSTS
+	else:
+		COSTS = NET_COSTS
 
 def load_group_users_and_csd():
 	"""
@@ -400,16 +414,24 @@ def random_greedy(input_groups, items, normalized_costs, slots, S):
 	return S, max_utility
 
 def CSD_greedy(input_groups, items, normalized_costs, slots, S):
+	return baseline_greedy(input_groups, items, normalized_costs, slots, S, GROUP_CSD)
+
+def baseline_greedy(input_groups, items, normalized_costs, slots, S, sort_reference):
 	groups = input_groups[:]
-	groups = sorted(groups, key=lambda x:GROUP_CSD[x], reverse=True)
+	groups = sorted(groups, key=lambda x:sort_reference[x], reverse=True)
 	max_utility = utility_monte_carlo(S)
 	for group in groups:
 		new_pair, utility_increase, utility = find_max_utility_increase([group,], items, normalized_costs, slots, S)
-		if new_pair != None: # sometimes rand_group's cost is too high, then new_pair will be None, but we still can find more groups
+		if new_pair != None: 
 			S = S.union({new_pair})
 			max_utility = utility
 	return S, max_utility
 
+def user_num_greedy(input_groups, items, normalized_costs, slots, S):
+	return baseline_greedy(input_groups, items, normalized_costs, slots, S, USER_NUM_COSTS)
+
+def network_value_greedy(input_groups, items, normalized_costs, slots, S):
+	return baseline_greedy(input_groups, items, normalized_costs, slots, S, NET_COSTS)
 
 if __name__ == '__main__':
 
