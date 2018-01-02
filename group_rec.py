@@ -512,6 +512,8 @@ if __name__ == '__main__':
 		print 'utility:', UTILITY_FUNCTION
 
 		csd_greedy_utilities = []
+		user_number_greedy_utilities = []
+		network_value_greedy_utilities = []
 		random_utilities = []
 		simple_greedy_utilities = []
 		cost_greedy_utilities = []
@@ -537,13 +539,29 @@ if __name__ == '__main__':
 			print csd_finished - simulation_finished, ' seconds'
 			csd_greedy_utilities.append(csd_greedy_results[1])
 
+			###### user number greedy ############
+			user_num_greedy_results = user_num_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
+			print 'user number greedy:', user_num_greedy_results
+			logger.info('user number greedy: {}'.format(user_num_greedy_results))
+			ung_finished = time.clock()
+			print ung_finished - csd_finished, ' seconds'
+			user_number_greedy_utilities.append(user_num_greedy_results[1])
+
+			##### network value greedy ########
+			network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
+			print 'user number greedy:', network_value_greedy_results
+			logger.info('user number greedy: {}'.format(network_value_greedy_results))
+			nvg_finished = time.clock()
+			print nvg_finished - ung_finished, ' seconds'
+			network_value_greedy_utilities.append(network_value_greedy_results[1])			
+
 			####### random greedy ###############
 			for iii in range(10):
 				random_results = random_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
 				print 'random greedy:', random_results
 				logger.info('random greedy: {}'.format(random_results))
 				rg_finished = time.clock()
-				print rg_finished - csd_finished, ' seconds'
+				print rg_finished - nvg_finished, ' seconds'
 				random_utilities.append(random_results[1])
 
 			###### simple greedy ###################
@@ -571,11 +589,13 @@ if __name__ == '__main__':
 			our_utilities.append(our_method_results[1])
 
 		csd_result = np.mean(np.asarray(csd_greedy_utilities))
+		ung_result = np.mean(np.asarray(user_number_greedy_utilities))
+		nvg_result = np.mean(np.asarray(network_value_greedy_utilities))
 		rand_result = np.mean(np.asarray(random_utilities))
 		sg_result = np.mean(np.asarray(simple_greedy_utilities))
 		cg_result = np.mean(np.asarray(cost_greedy_utilities))
 		our_result = np.mean(np.asarray(our_utilities))
-		result_str = 'random: {}, csd: {}, simple: {}, cost: {}, our: {}'.format(rand_result, csd_result, sg_result, cg_result, our_result)
+		result_str = 'random: {}, user number: {}, net value: {}, csd: {}, simple: {}, cost: {}, our: {}'.format(rand_result, ung_result, nvg_result, csd_result, sg_result, cg_result, our_result)
 		# result_str = 'random: {}, csd: {}'.format(rand_result, csd_result)
 		print result_str
 		parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOTS[0], COST_TYPE, UTILITY_FUNCTION)
