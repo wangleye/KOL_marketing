@@ -20,7 +20,7 @@ def simulate_hit_users_monte_carlo(items, group_users, alpha, sim_dict, K, proc_
 
 	rec_pairs = []
 	for item in items:
-		for group in range(len(group_users)):
+		for group in group_users:
 			rec_pairs.append((item, group))
 
 	cache_hit_users = {}
@@ -76,7 +76,7 @@ def friends(user_id):
 
 def sim_to_hit_prob(sim):
 	# learned logistic / isonotic function
-	return 1.0/(1.0+math.exp(-(-3.559+1.084*sim)))
+	return 1.0/(1.0+math.exp(-(-4.288+1.328*sim)))
 
 # store the hit users calculated before
 def sim_hit_users(item, users_in_group, sim_dict, alpha):
@@ -116,12 +116,3 @@ def similarity(item, user, sim_dict):
 		return 0
 	else:
 		return sim_dict[user][item]
-
-if __name__ == '__main__':
-	items = ["74089565764", "10498014129"]
-	group_users = {0:["100000147616782","100000155110661"], 1:["1592423125", "1626196906"]}
-	sim_dict = dict()
-	simulate_hit_users_monte_carlo(items, group_users, sim_dict, 1000, 99)
-
-
-

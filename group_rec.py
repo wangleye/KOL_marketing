@@ -18,25 +18,29 @@ TEST_ITEM_NUM = 100 # the number of items used in the test
 TEST_GROUP_NUM = 50 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
-GROUP_USERS = []
-GROUP_CSD = []
-COSTS = []
+GROUP_USERS = {}
+GROUP_CSD = {}
+COSTS = {}
 GROUPS = []
 ITEMS = []
 ITEMS_COUNT = {}
 USER_ITEMS = {}
 USER_FRIENDS = {}
-SLOTS = np.ones(TOTAL_GROUP_NUM) # set slot constraint to one for all the groups
-BUDGET = 1
-COST_TYPE = 'num' # 'net' or 'num'
+SLOTS = {}
+BUDGET = 3
+COST_TYPE = 'number' # 'net' or 'number'
 
-alpha = 0.04
+alpha = 0.02
 epsilon = 0.1
 
 DATA_DIR = './facebook'
 
 CACHE_UTILITY = {}
 CACHE_HIT_USERS = {}
+
+def init_slots(k=1):
+	for group in GROUP_USERS:
+		SLOTS[group] = k
 
 def load_simulated_hits():
 	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} order by group_id, item_id".format(alpha-0.001, alpha+0.001)
@@ -59,8 +63,7 @@ def load_simulated_hits():
 		j += 1
 
 def load_groups():
-	global GROUPS
-	GROUPS = random.sample(range(TOTAL_GROUP_NUM), TEST_GROUP_NUM)
+	GROUPS = random.sample(GROUP_USERS.keys(), TEST_GROUP_NUM)
 
 def load_items():
 	"""
@@ -86,7 +89,7 @@ def load_user_item_similarity():
 
 def read_user_item_similarity_file_line_by_line():
 	global SIM
-	with open("{}/user_item_aff_score_relationship_between_50000_users_100_item".format(DATA_DIR)) as inputfile:
+	with open("{}/user_item_aff_score_100_item_50000_relation_KOL".format(DATA_DIR)) as inputfile:
 		first_line = True
 		for line in inputfile:
 			if first_line:
@@ -108,30 +111,34 @@ def load_group_costs():
 	return group costs from file
 	"""
 	global COSTS
-	COSTS = list()
-	with open("{}/group_costs_{}".format(DATA_DIR, COST_TYPE)) as inputfile:
+	COSTS = {}
+	with open("{}/KOL_{}_cost".format(DATA_DIR, COST_TYPE)) as inputfile:
 		for line in inputfile:
 			if len(line.strip()) > 0:
-				COSTS.append(float(line.strip())/BUDGET) # normalized costs
+				words = line.strip().split(';')
+				group_id = words[0]
+				normalized_cost = float(words[1])/BUDGET
+				COSTS[group_id] = normalized_cost
 
 def load_group_users_and_csd():
 	"""
 	return groups
 	"""
-	global GROUP_USERS
-	with open("{}/group_users".format(DATA_DIR)) as inputfile:
+	with open("{}/KOL_audience".format(DATA_DIR)) as inputfile:
 		for line in inputfile:
 			if len(line.strip()) > 0:
-				users = line.split()
-				GROUP_USERS.append(users)
-	GROUP_USERS = GROUP_USERS[0:TOTAL_GROUP_NUM]
+				words = line.strip().split(';')
+				group_id = words[0]
+				users = words[1].split()
+				GROUP_USERS[group_id] = users
 
-	global GROUP_CSD
-	with open("{}/group_csd".format(DATA_DIR)) as inputfile:
+	with open("{}/KOL_CSD".format(DATA_DIR)) as inputfile:
 		for line in inputfile:
 			if len(line.strip()) > 0:
-				GROUP_CSD.append(float(line.strip()))
-	GROUP_CSD = GROUP_CSD[0:TOTAL_GROUP_NUM]
+				words = line.strip().split(';')
+				group_id = words[0]
+				csd = float(words[1])
+				GROUP_CSD[group_id] = csd
 
 def set2key(s):
 	"""
@@ -262,11 +269,11 @@ def still_has_slot(selected_recs, slots, i):
 	else:
 		return False
 
-def is_over_slot_constraint(selected_recs, slots, i):
+def is_over_slot_constraint(selected_recs, slots, group_id):
 	"""
-	judge whether the i-th group slot constraint is violated
+	judge whether a group slot constraint is violated
 	"""
-	max_slot = slots[i]
+	max_slot = slots[group_id]
 	current_slot = 0
 	for (item, group) in selected_recs:
 		if group == i:
@@ -421,6 +428,7 @@ if __name__ == '__main__':
 	load_user_item_similarity()
 	load_items()
 	load_groups()
+	init_slots()
 	initialize_finished = time.clock()
 	print 'initialization finished: ', initialize_finished - start, ' seconds'
 
