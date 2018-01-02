@@ -29,6 +29,7 @@ ITEMS_COUNT = {}
 USER_ITEMS = {}
 USER_FRIENDS = {}
 SLOTS = {}
+SLOT_NUM = 1
 BUDGET = 3
 COST_TYPE = 'number' # 'net' or 'number'
 
@@ -40,7 +41,7 @@ DATA_DIR = './facebook'
 CACHE_UTILITY = {}
 CACHE_HIT_USERS = {}
 
-def init_slots(k=1):
+def init_slots(k=SLOT_NUM):
 	for group in GROUP_USERS:
 		SLOTS[group] = k
 
@@ -269,14 +270,14 @@ def is_over_budget(selected_recs, normalized_costs):
 	else:
 		return False
 
-def still_has_slot(selected_recs, slots, i):
+def still_has_slot(selected_recs, slots, group_id):
 	"""
-	judge whether the i-th group still has slot
+	judge whether a group still has slot
 	"""
-	max_slot = slots[i]
+	max_slot = slots[group_id]
 	current_slot = 0
 	for (item, group) in selected_recs:
-		if group == i:
+		if group == group_id:
 			current_slot += 1
 	if current_slot < max_slot:
 		return True
@@ -290,7 +291,7 @@ def is_over_slot_constraint(selected_recs, slots, group_id):
 	max_slot = slots[group_id]
 	current_slot = 0
 	for (item, group) in selected_recs:
-		if group == i:
+		if group == group_id:
 			current_slot += 1
 	if current_slot > max_slot:
 		return True
@@ -454,23 +455,23 @@ if __name__ == '__main__':
 	initialize_finished = time.clock()
 	print 'initialization finished: ', initialize_finished - start, ' seconds'
 
-	print 'start simulation in parallel'
-	ppservers = ()
-	n_worker = 8
-	job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
-	k_worker = 125
-	# n_worker * k_worker is the number of simulations for each (item, group) pair
-	dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-	jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
-	for i in range(n_worker*k_worker):
-		CACHE_HIT_USERS[i] = {}
-	i = 0
-	for job in jobs:
-		hit_users = job()
-		for rec_pair in hit_users:
-			for j in range(i*k_worker, (i+1)*k_worker):
-				CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
-		i += 1
+	# print 'start simulation in parallel'
+	# ppservers = ()
+	# n_worker = 8
+	# job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
+	# k_worker = 125
+	# # n_worker * k_worker is the number of simulations for each (item, group) pair
+	# dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
+	# jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+	# for i in range(n_worker*k_worker):
+	# 	CACHE_HIT_USERS[i] = {}
+	# i = 0
+	# for job in jobs:
+	# 	hit_users = job()
+	# 	for rec_pair in hit_users:
+	# 		for j in range(i*k_worker, (i+1)*k_worker):
+	# 			CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
+	# 	i += 1
 
 	print 'load simulation user hits'
 	load_simulated_hits()
@@ -508,7 +509,7 @@ if __name__ == '__main__':
 		print 'num of items:', TEST_ITEM_NUM
 		print 'alpha:', alpha
 		print 'budget:', BUDGET
-		print 'slots:', SLOTS[0]
+		print 'slots:', SLOT_NUM
 		print 'utility:', UTILITY_FUNCTION
 
 		csd_greedy_utilities = []
@@ -598,6 +599,6 @@ if __name__ == '__main__':
 		result_str = 'random: {}, user number: {}, net value: {}, csd: {}, simple: {}, cost: {}, our: {}'.format(rand_result, ung_result, nvg_result, csd_result, sg_result, cg_result, our_result)
 		# result_str = 'random: {}, csd: {}'.format(rand_result, csd_result)
 		print result_str
-		parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOTS[0], COST_TYPE, UTILITY_FUNCTION)
+		parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION)
 		logger.info(parameter_setting)
 		logger.info(result_str)
