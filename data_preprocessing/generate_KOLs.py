@@ -14,28 +14,36 @@ class User:
         self.uid = uid
         self.friends = friends
         self.items = items
-        self.friend_size = len(friends)
 
-def get_KOLs_with_most_friends(k=5000):
+def get_KOLs_with_most_friends(k=1000):
     users = []
     x = conn.cursor()
-    x.execute("SELECT iduser, friendstr, musicstr FROM user")
+    x.execute("SELECT iduser, friendstr, musicstr FROM user limit 100000")
     results = x.fetchall()
     for result in results:
         user_id = result[0]
-        friends = result[1].split(';')
+        friends = set(result[1].split(';'))
         items = result[2].split(';')
         user = User(user_id, friends, items)
         users.append(user)
         USERS_BY_UID[user.uid] = user
+    
+    count = 0
+    for result in results:
+        count += 1
+        if count%100 == 0:
+            print count
+        user_id = result[0]
+        USERS_BY_UID[user_id].friends = USERS_BY_UID[user_id].friends & set(USERS_BY_UID.keys()) # delete users who are not in database
 
-    users.sort(key=lambda x : x.friend_size, reverse=True)
+    users.sort(key=lambda x : len(x.friends), reverse=True)
     return users[0:k]
 
 def output_KOL_audience_to_file(KOLs):
     with open('KOL_audience', 'w') as outputfile:
         for kol in KOLs:
             outputfile.write('{};{}\n'.format(kol.uid, ' '.join(kol.friends)))
+            print(kol.uid, len(kol.friends))
 
 def liked_items(user_id):
     """
@@ -49,7 +57,7 @@ def liked_items(user_id):
 def KOL_CSD(kol):
     distinct_items = set()
     item_popularity = 0
-    num_users = kol.friend_size
+    num_users = len(kol.friends)
     for u in kol.friends:
         distinct_items.update(liked_items(u))
         item_popularity += len(liked_items(u))
@@ -114,11 +122,11 @@ def output_KOL_net_cost(KOLs):
 def output_KOL_number_cost(KOLs):
     max_value = 0
     for kol in KOLs:
-        if kol.friend_size > max_value:
-            max_value = kol.friend_size
+        if len(kol.friends) > max_value:
+            max_value = len(kol.friends)
     with open('KOL_number_cost', 'w') as outputfile:
         for kol in KOLs:
-            outputfile.write('{};{}\n'.format(kol.uid, kol.friend_size*1.0/max_value))
+            outputfile.write('{};{}\n'.format(kol.uid, len(kol.friends)*1.0/max_value))
 
 if __name__ == '__main__':
     print('selecting KOLs...')

@@ -26,12 +26,10 @@ COSTS = {}
 GROUPS = []
 ITEMS = []
 ITEMS_COUNT = {}
-USER_ITEMS = {}
-USER_FRIENDS = {}
 SLOTS = {}
 SLOT_NUM = 1
-BUDGET = 3
-COST_TYPE = 'number' # 'net' or 'number'
+BUDGET = 1
+COST_TYPE = 'net' # 'net' or 'number'
 
 alpha = 0.02
 epsilon = 0.1
@@ -56,13 +54,13 @@ def load_simulated_hits():
 	last_rec_pair = (-1,-1)
 	for each_result in results:
 		item = str(each_result[1])
-		group = int(each_result[0])
+		group = str(each_result[0])
 		hit_users = set(str(each_result[2]).split(','))
 		rec_pair = (item,group)
 		if rec_pair != last_rec_pair:
 			j = 0
 			last_rec_pair = rec_pair
-		CACHE_HIT_USERS[j%K][rec_pair] = hit_users # j%K to prevent some pairs with more than K simulations
+		CACHE_HIT_USERS[j%K][set2key(rec_pair)] = hit_users # j%K to prevent some pairs with more than K simulations
 		j += 1
 
 def load_groups():
@@ -194,7 +192,7 @@ def utility_monte_carlo(rec_pairs):
 			hit_users[item] = set() # initialize hit users for any item in recommendations
 
 		for (item, group) in rec_pairs:
-			hit_users[item].update(CACHE_HIT_USERS[i][(item, group)])
+			hit_users[item].update(CACHE_HIT_USERS[i][set2key((item, group))])
 
 		# use the HIT_USERS to calculate utility
 		utility_sum += UTILITY_FUNCTION(hit_users)
@@ -480,7 +478,7 @@ if __name__ == '__main__':
 	print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
 	# simulate groups and items
-	repeat_times = 5
+	repeat_times = 10
 	# candidates = []
 	# for i in range(repeat_times):
 	# 	load_items()
@@ -551,8 +549,8 @@ if __name__ == '__main__':
 
 			##### network value greedy ########
 			network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'user number greedy:', network_value_greedy_results
-			logger.info('user number greedy: {}'.format(network_value_greedy_results))
+			print 'network value greedy:', network_value_greedy_results
+			logger.info('network value greedy: {}'.format(network_value_greedy_results))
 			nvg_finished = time.clock()
 			print nvg_finished - ung_finished, ' seconds'
 			network_value_greedy_utilities.append(network_value_greedy_results[1])			

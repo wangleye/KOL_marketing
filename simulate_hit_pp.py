@@ -77,7 +77,7 @@ def friends(user_id):
 
 def sim_to_hit_prob(sim):
 	# learned logistic / isonotic function
-	return 1.0/(1.0+math.exp(-(-4.288+1.328*sim)))
+	return 1.0/(1.0+math.exp(-(-4.188+1.375*sim)))
 
 # store the hit users calculated before
 def sim_hit_users(item, users_in_group, sim_dict, alpha):
