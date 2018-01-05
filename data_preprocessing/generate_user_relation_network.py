@@ -5,16 +5,17 @@ conn = pymysql.connect(host='127.0.0.1',
     passwd='123456',
     db='all0504')
 
-def get_user_set():
-    user_set = set()
-    with open('../facebook/KOL_audience') as input_user_file:
-        for line in input_user_file:
-            if line.strip() == '':
-                continue
-            words = line.strip().split(';')
-            user_ids = set(words[1].split(' '))
-            user_set = user_set.union(user_ids)
-    return user_set
+# def get_user_set():
+#     # user_set = set()
+#     # with open('../facebook/KOL_audience') as input_user_file:
+#     #     for line in input_user_file:
+#     #         if line.strip() == '':
+#     #             continue
+#     #         words = line.strip().split(';')
+#     #         user_ids = set(words[1].split(' '))
+#     #         user_set = user_set.union(user_ids)
+
+#     return user_set
 
 def get_item_set(num=100):
     item_set = set()
@@ -30,20 +31,18 @@ def get_item_set(num=100):
                 break
     return item_set
 
-def read_user_item_preference(user_set, item_set):
+def read_user_item_preference(item_set):
     user_item_likes = {}
     x = conn.cursor()
     x.execute("SELECT iduser, moviestr FROM user")
     results = x.fetchall()
     for result in results:
         user_id = result[0]
-        if user_id not in user_set:
-            continue
         user_item_likes[user_id] = set()
         moviestr_items = result[1].split(';')
         for movie_i in moviestr_items:
             user_item_likes[user_id].add(movie_i)
-    return user_item_likes
+    return user_item_likes, set(user_item_likes.keys())
 
 def read_user_relationship(user_set):
     user_relationship = {}
@@ -91,12 +90,11 @@ def get_item_similarity(item1, item2):
         return 0
     return ITEM_SIM[item1][item2]
 
-def user_item_affinity(user_id, target_item, consider_friend=True, indirect_friend=False, inindirect_friend=False): #indirect_friends: whether consider indirect friends
+def user_item_affinity(user_id, target_item, consider_friend=False, indirect_friend=False, inindirect_friend=False): #indirect_friends: whether consider indirect friends
     score = 0
     for item in ITEM_SET:
         if item in USER_PREF[user_id]:
             score += get_item_similarity(target_item, item)
-
 
     considered_f = set()
     if consider_friend:
@@ -122,7 +120,7 @@ def user_item_affinity(user_id, target_item, consider_friend=True, indirect_frie
     return score
 
 def output_user_item_aff():
-    with open("user_item_aff_score_100_item_50000_relation_KOL.csv", "w") as outputfile:
+    with open("user_item_aff_score_100_item_only_KOL_complete.csv", "w") as outputfile:
         outputfile.write('user item score truth\n')
         for user in USER_SET:
             if user not in USER_PREF:
@@ -134,14 +132,14 @@ def output_user_item_aff():
                     outputfile.write('{} {} {} {}\n'.format(user, item, score, isTrue))
 
 if __name__ == '__main__':
-    print('reading user set...')
-    USER_SET = get_user_set()
+    # print('reading user set...')
+    # USER_SET = get_user_set()
     print('reading item set...')
     ITEM_SET = get_item_set()
     print('reading user preference...')
-    USER_PREF = read_user_item_preference(USER_SET, ITEM_SET)
+    USER_PREF, USER_SET = read_user_item_preference(ITEM_SET)
     print('reading user relationship...')
-    USER_RELATION = read_user_relationship(USER_SET)
+    # USER_RELATION = read_user_relationship(USER_SET)
     print('reading item similarity...')
     ITEM_SIM = read_item_similarity_from_file()
     print('outputing to file...')

@@ -26,10 +26,12 @@ COSTS = {}
 GROUPS = []
 ITEMS = []
 ITEMS_COUNT = {}
+ITEM_FANS = {}
+USER_FRIENDS = {}
 SLOTS = {}
 SLOT_NUM = 1
 BUDGET = 1
-COST_TYPE = 'net' # 'net' or 'number'
+COST_TYPE = 'number' # 'net' or 'number'
 
 alpha = 0.02
 epsilon = 0.1
@@ -81,7 +83,6 @@ def load_items():
 	ITEMS_TOP_100 = ITEMS[0:100]
 	ITEMS = random.sample(ITEMS_TOP_100, TEST_ITEM_NUM)
 
-
 def load_user_item_similarity():
 	"""
 	read an item similarity file
@@ -91,7 +92,8 @@ def load_user_item_similarity():
 
 def read_user_item_similarity_file_line_by_line():
 	global SIM
-	with open("{}/user_item_aff_score_100_item_50000_relation_KOL".format(DATA_DIR)) as inputfile:
+	global ITEM_FANS
+	with open("{}/user_item_aff_score_100_item_only_KOL_complete".format(DATA_DIR)) as inputfile:
 		first_line = True
 		for line in inputfile:
 			if first_line:
@@ -103,10 +105,17 @@ def read_user_item_similarity_file_line_by_line():
 				user = words[0]
 				item = words[1]
 				similarity = float(words[2])
+				is_true_like = int(words[3])
 
 				if user not in SIM:
 					SIM[user] = {}
 				SIM[user][item] = similarity
+
+				if item not in ITEM_FANS:
+					ITEM_FANS[item] = set()
+				
+				if is_true_like == 1:
+					ITEM_FANS[item].add(user)
 
 def load_group_costs():
 	"""
@@ -433,6 +442,72 @@ def user_num_greedy(input_groups, items, normalized_costs, slots, S):
 def network_value_greedy(input_groups, items, normalized_costs, slots, S):
 	return baseline_greedy(input_groups, items, normalized_costs, slots, S, NET_COSTS)
 
+# for simulating final results
+def simulate_final_utility(rec_pairs, simulation_times = 10000):
+	utility_sum = 0
+	for i in range(simulation_times):
+		hit_users = {}
+		for (item, group) in rec_pairs:
+			hit_users[item] = set() # initialize hit users for any item in recommendations
+
+		for (item, group) in rec_pairs:
+			hit_users[item].update(simulate_final_hit_users(item, GROUP_USERS[group]))
+
+		# use the HIT_USERS to calculate utility
+		utility_sum += UTILITY_FUNCTION(hit_users)
+	utility = utility_sum * 1.0 / simulation_times
+	return utility
+
+def simulate_final_hit_users(item, users_in_group):
+	"""
+	simulation to get hit users for calculating utility
+	"""
+	hit_users = set()
+	share_users = set()
+	# hit users in group
+	for u in users_in_group:
+		if u in ITEM_FANS[item]:
+			hit_users.add(u)
+			if (random.random()<=alpha):
+				share_users.add(u)
+
+	# hit users through social influcence
+	while len(share_users) > 0:
+		new_share_users = set()
+		for u in share_users:
+			for f in friends(u):
+				if f in hit_users:
+					continue
+				if f in ITEM_FANS[item]:
+					hit_users.add(f)
+					if (random.random()<=alpha):
+						new_share_users.add(f)
+		share_users = new_share_users
+	return hit_users
+
+def friends(user_id):
+	"""
+	return the friends' ids of a user
+	"""
+	if user_id in USER_FRIENDS:
+		return USER_FRIENDS[user_id]
+	# read from DB
+	query_statement = "SELECT friendstr FROM user WHERE iduser = '{}'".format(user_id)
+	x = conn.cursor()
+	x.execute(query_statement)
+	results = x.fetchall()
+	if len(results) == 0:
+		return set()
+	else:
+		friendstr = results[0][0]
+		friend_ids = friendstr.split(';')
+		USER_FRIENDS[user_id] = friend_ids
+		return friend_ids
+
+def get_result_str(result_array):
+	result_str = str(np.mean(np.asarray(result_array))) + "(" + str(np.std(np.asarray(result_array))) + ")"
+	return result_str
+
 if __name__ == '__main__':
 
 	# initialize logger file
@@ -456,9 +531,9 @@ if __name__ == '__main__':
 
 	# print 'start simulation in parallel'
 	# ppservers = ()
-	# n_worker = 8
+	# n_worker = 4
 	# job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
-	# k_worker = 125
+	# k_worker = 250
 	# # n_worker * k_worker is the number of simulations for each (item, group) pair
 	# dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
 	# jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
@@ -487,7 +562,7 @@ if __name__ == '__main__':
 
 	# for bud in [1.5, 2.0, 2.5]:
 	# for s in [1, ]:
-	for item_num, group_num in [(20,10), (40, 20), (60, 30), (80, 40), (100, 50)]:
+	for item_num, group_num in [(100,20), (100, 40), (100, 60), (100, 80), (100, 100)]:
 
 		#### for varying item and group numbers
 		TEST_GROUP_NUM = group_num
@@ -533,68 +608,76 @@ if __name__ == '__main__':
 
 			###### CSD greedy ###################
 			csd_greedy_results = CSD_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'CSD greedy:', csd_greedy_results
+			real_result = simulate_final_utility(csd_greedy_results[0])
+			print 'CSD greedy:', csd_greedy_results, real_result
 			logger.info('CSD greedy: {}'.format(csd_greedy_results))
 			csd_finished = time.clock()
 			print csd_finished - simulation_finished, ' seconds'
-			csd_greedy_utilities.append(csd_greedy_results[1])
+			csd_greedy_utilities.append(real_result)
 
 			###### user number greedy ############
 			user_num_greedy_results = user_num_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'user number greedy:', user_num_greedy_results
+			real_result = simulate_final_utility(user_num_greedy_results[0])
+			print 'user number greedy:', user_num_greedy_results, real_result
 			logger.info('user number greedy: {}'.format(user_num_greedy_results))
 			ung_finished = time.clock()
 			print ung_finished - csd_finished, ' seconds'
-			user_number_greedy_utilities.append(user_num_greedy_results[1])
+			user_number_greedy_utilities.append(real_result)
 
 			##### network value greedy ########
 			network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'network value greedy:', network_value_greedy_results
+			real_result = simulate_final_utility(network_value_greedy_results[0])
+			print 'network value greedy:', network_value_greedy_results, real_result
 			logger.info('network value greedy: {}'.format(network_value_greedy_results))
 			nvg_finished = time.clock()
 			print nvg_finished - ung_finished, ' seconds'
-			network_value_greedy_utilities.append(network_value_greedy_results[1])			
+			network_value_greedy_utilities.append(real_result)			
 
 			####### random greedy ###############
 			for iii in range(10):
 				random_results = random_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-				print 'random greedy:', random_results
+				real_result = simulate_final_utility(random_results[0])
+				print 'random greedy:', random_results, real_result
 				logger.info('random greedy: {}'.format(random_results))
 				rg_finished = time.clock()
 				print rg_finished - nvg_finished, ' seconds'
-				random_utilities.append(random_results[1])
+				random_utilities.append(real_result)
 
 			###### simple greedy ###################
 			simple_greedy_results = simple_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'simple greedy:', simple_greedy_results
+			real_result = simulate_final_utility(simple_greedy_results[0])
+			print 'simple greedy:', simple_greedy_results, real_result
 			logger.info('simple greedy: {}'.format(simple_greedy_results))
 			sg_finished = time.clock()
 			print sg_finished - rg_finished, ' seconds'
-			simple_greedy_utilities.append(simple_greedy_results[1])
+			simple_greedy_utilities.append(real_result)
 
 			###### cost greedy ###################
 			cost_greedy_results = cost_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-			print 'cost greedy:', cost_greedy_results
+			real_result = simulate_final_utility(cost_greedy_results[0])
+			print 'cost greedy:', cost_greedy_results, real_result
 			logger.info('cost greedy: {}'.format(cost_greedy_results))
 			cg_finished = time.clock()
 			print cg_finished - sg_finished, ' seconds'
-			cost_greedy_utilities.append(cost_greedy_results[1])
+			cost_greedy_utilities.append(real_result)
 
 			###### our method ###################
 			our_method_results = near_opt_group_rec(GROUPS, ITEMS, COSTS, SLOTS)
-			print 'our method:', our_method_results
+			real_result = simulate_final_utility(our_method_results[0])
+			print 'our method:', our_method_results, real_result
 			logger.info('our method: {}'.format(our_method_results))
 			our_finished = time.clock()
 			print our_finished - cg_finished, ' seconds'
-			our_utilities.append(our_method_results[1])
+			our_utilities.append(real_result)
 
-		csd_result = np.mean(np.asarray(csd_greedy_utilities))
-		ung_result = np.mean(np.asarray(user_number_greedy_utilities))
-		nvg_result = np.mean(np.asarray(network_value_greedy_utilities))
-		rand_result = np.mean(np.asarray(random_utilities))
-		sg_result = np.mean(np.asarray(simple_greedy_utilities))
-		cg_result = np.mean(np.asarray(cost_greedy_utilities))
-		our_result = np.mean(np.asarray(our_utilities))
+		csd_result = get_result_str(csd_greedy_utilities)
+		ung_result = get_result_str(user_number_greedy_utilities)
+		nvg_result = get_result_str(network_value_greedy_utilities)
+		rand_result = get_result_str(random_utilities)
+		sg_result = get_result_str(simple_greedy_utilities)
+		cg_result = get_result_str(cost_greedy_utilities)
+		our_result = get_result_str(our_utilities)
+
 		result_str = 'random: {}, user number: {}, net value: {}, csd: {}, simple: {}, cost: {}, our: {}'.format(rand_result, ung_result, nvg_result, csd_result, sg_result, cg_result, our_result)
 		# result_str = 'random: {}, csd: {}'.format(rand_result, csd_result)
 		print result_str

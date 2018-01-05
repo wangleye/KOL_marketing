@@ -77,7 +77,7 @@ def friends(user_id):
 
 def sim_to_hit_prob(sim):
 	# learned logistic / isonotic function
-	return 1.0/(1.0+math.exp(-(-4.188+1.375*sim)))
+	return 1.0/(1.0+math.exp(-(-4.103+1.607*sim)))
 
 # store the hit users calculated before
 def sim_hit_users(item, users_in_group, sim_dict, alpha):
@@ -100,9 +100,9 @@ def sim_hit_users(item, users_in_group, sim_dict, alpha):
 	while len(share_users) > 0:
 		new_share_users = set()
 		for u in share_users:
-			if u in hit_users:
-				continue
 			for f in friends(u):
+				if f in hit_users:
+					continue
 				sim = similarity(item, f, sim_dict)
 				hit_f_p = sim_to_hit_prob(sim)
 				if (random.random()<=hit_f_p):
