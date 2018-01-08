@@ -30,7 +30,7 @@ ITEM_FANS = {}
 USER_FRIENDS = {}
 SLOTS = {}
 SLOT_NUM = 1
-BUDGET = 1.5
+BUDGET = 1
 COST_TYPE = 'number' # 'net' or 'number'
 
 alpha = 0.02
@@ -39,14 +39,17 @@ epsilon = 0.1
 DATA_DIR = './facebook'
 
 CACHE_UTILITY = {}
+CACHE_HIT_USERS = {}
 
 def init_slots(k=SLOT_NUM):
 	for group in GROUP_USERS:
 		SLOTS[group] = k
 
 
-def load_simulated_hits(group_id, item_id, K=1000):
-	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit {}".format(alpha-0.001, alpha+0.001, group_id, item_id, K)
+def load_simulated_hits(group_id, item_id):
+	if set2key((item_id, group_id)) in CACHE_HIT_USERS:
+		return CACHE_HIT_USERS[set2key((item_id, group_id))]
+	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} and group_id = '{}' and item_id = '{}'".format(alpha-0.001, alpha+0.001, group_id, item_id)
 	x = conn.cursor()
 	x.execute(query_str)
 	results = x.fetchall()
@@ -57,6 +60,7 @@ def load_simulated_hits(group_id, item_id, K=1000):
 		group = str(each_result[0])
 		hit_users = set(str(each_result[2]).split(','))
 		hit_users_list.append(hit_users)
+	CACHE_HIT_USERS[set2key((item_id, group_id))] = hit_users_list
 	return hit_users_list
 
 def load_groups():
@@ -197,7 +201,7 @@ def utility_monte_carlo(rec_pairs):
 			hit_users[item] = set() # initialize hit users for any item in recommendations
 
 		for (item, group) in rec_pairs:
-			sim_hit_users = random.sample(cache_hit_users[set2key((item, group))], 1)
+			sim_hit_users = random.choice(cache_hit_users[set2key((item, group))])
 			hit_users[item].update(sim_hit_users)
 
 		# use the HIT_USERS to calculate utility
@@ -559,7 +563,7 @@ if __name__ == '__main__':
 
 	# for bud in [1.5, 2.0, 2.5]:
 	# for s in [1, ]:
-	for item_num, group_num in [(60, 10), (60, 20), (60, 30), (60, 40), (60, 50)]:
+	for item_num, group_num in [(100, 10), (100, 20), (100, 30), (100, 40), (100, 50)]:
 
 		#### for varying item and group numbers
 		TEST_GROUP_NUM = group_num
@@ -632,7 +636,7 @@ if __name__ == '__main__':
 			network_value_greedy_utilities.append(real_result)			
 
 			####### random greedy ###############
-			for iii in range(10):
+			for iii in range(5):
 				random_results = random_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
 				real_result = simulate_final_utility(random_results[0])
 				print 'random greedy:', random_results, real_result
