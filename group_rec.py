@@ -45,6 +45,19 @@ def init_slots(k=SLOT_NUM):
 	for group in GROUP_USERS:
 		SLOTS[group] = k
 
+def load_all_simulated_hits():
+	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {}".format(alpha-0.001, alpha+0.001)
+	x = conn.cursor()
+	x.execute(query_str)
+	results = x.fetchall()
+	for each_result in results:
+		item = str(each_result[1])
+		group = str(each_result[0])
+		hit_users = set(str(each_result[2]).split(','))
+		key_value = set2key((item, group))
+		if key_value not in CACHE_HIT_USERS:
+			CACHE_HIT_USERS[key_value] = []
+		CACHE_HIT_USERS[key_value].append(hit_users)
 
 def load_simulated_hits(group_id, item_id):
 	if set2key((item_id, group_id)) in CACHE_HIT_USERS:
@@ -53,7 +66,6 @@ def load_simulated_hits(group_id, item_id):
 	x = conn.cursor()
 	x.execute(query_str)
 	results = x.fetchall()
-	last_rec_pair = (-1,-1)
 	hit_users_list = list()
 	for each_result in results:
 		item = str(each_result[1])
@@ -550,6 +562,7 @@ if __name__ == '__main__':
 	# 			CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
 	# 	i += 1
 
+	load_all_simulated_hits()
 	simulation_finished = time.clock()
 	print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
