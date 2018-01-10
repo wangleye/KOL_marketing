@@ -33,7 +33,7 @@ SLOT_NUM = 1
 BUDGET = 1
 COST_TYPE = 'number' # 'net' or 'number'
 
-alpha = 0.02
+alpha = 0.04
 epsilon = 0.1
 
 DATA_DIR = './facebook'
@@ -46,23 +46,42 @@ def init_slots(k=SLOT_NUM):
 		SLOTS[group] = k
 
 def load_all_simulated_hits():
-	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {}".format(alpha-0.001, alpha+0.001)
-	x = conn.cursor()
-	x.execute(query_str)
-	results = x.fetchall()
-	for each_result in results:
-		item = str(each_result[1])
-		group = str(each_result[0])
-		hit_users = set(str(each_result[2]).split(','))
-		key_value = set2key((item, group))
-		if key_value not in CACHE_HIT_USERS:
-			CACHE_HIT_USERS[key_value] = []
-		CACHE_HIT_USERS[key_value].append(hit_users)
+	groups = GROUP_USERS.keys()
+	items = ITEMS
+	print 'group len:', len(groups), 'item len:', len(items)
+	for idx, group in enumerate(groups):
+		print idx, group
+		for item in items:
+			load_simulated_hits(group, item)
+
+
+	# limit_lowerbound = 0
+	# step = 100000
+	# while True:
+	# 	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} limit {}, {}".format(alpha-0.001, alpha+0.001, limit_lowerbound, step)
+	# 	print(query_str)
+	# 	limit_lowerbound += step
+	# 	x = conn.cursor()
+	# 	x.execute(query_str)
+	# 	results = x.fetchall()
+	# 	count = 0
+	# 	for each_result in results:
+	# 		item = str(each_result[1])
+	# 		group = str(each_result[0])
+	# 		hit_users = set(str(each_result[2]).split(','))
+	# 		key_value = set2key((item, group))
+	# 		if key_value not in CACHE_HIT_USERS:
+	# 			CACHE_HIT_USERS[key_value] = []
+	# 		if len(CACHE_HIT_USERS[key_value]) < K: # at most load K simulation results
+	# 			CACHE_HIT_USERS[key_value].append(hit_users)
+	# 	if len(results) < step:
+	# 		print("finish loading!")
+	# 		break
 
 def load_simulated_hits(group_id, item_id):
 	if set2key((item_id, group_id)) in CACHE_HIT_USERS:
 		return CACHE_HIT_USERS[set2key((item_id, group_id))]
-	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} and group_id = '{}' and item_id = '{}'".format(alpha-0.001, alpha+0.001, group_id, item_id)
+	query_str = "select group_id, item_id, hit_users from simulate_group_rec where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(alpha-0.001, alpha+0.001, group_id, item_id)
 	x = conn.cursor()
 	x.execute(query_str)
 	results = x.fetchall()
@@ -576,7 +595,7 @@ if __name__ == '__main__':
 
 	# for bud in [1.5, 2.0, 2.5]:
 	# for s in [1, ]:
-	for item_num, group_num in [(100, 10), (100, 20), (100, 30), (100, 40), (100, 50)]:
+	for item_num, group_num in [(100, 100)]:
 
 		#### for varying item and group numbers
 		TEST_GROUP_NUM = group_num
