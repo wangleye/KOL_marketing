@@ -414,15 +414,17 @@ def random_greedy(input_groups, items, normalized_costs, slots, S):
     groups = input_groups[:]
     max_utility = utility_monte_carlo(S)
     rand_group = random.choice(groups)
+    item = random.choice(items)
     groups.remove(rand_group)
-    new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], items, normalized_costs, slots, S)
+    new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], [item,], normalized_costs, slots, S)
     while len(groups) > 0: # test all the groups until no one can be added
         if new_pair != None: # sometimes rand_group's cost is too high, then new_pair will be None, but we still can find more groups
             S = S.union({new_pair})
             max_utility = utility
         rand_group = random.choice(groups)
         groups.remove(rand_group)
-        new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], items, normalized_costs, slots, S)
+        item = random.choice(items)
+        new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], [item,], normalized_costs, slots, S)
     return S, max_utility
 
 def CSD_greedy(input_groups, items, normalized_costs, slots, S):
