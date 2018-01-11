@@ -83,8 +83,8 @@ def load_items():
                 ITEMS.append(item)
                 ITEMS_COUNT[item] = int(item_count)
     ITEMS_TOP_100 = ITEMS[0:100]
-    ITEMS = [x[1] for x in sorted(random.sample(enumerate(ITEMS_TOP_100), TEST_ITEM_NUM))]
-    # ITEMS = random.sample(ITEMS_TOP_100, TEST_ITEM_NUM)
+    # ITEMS = [x[1] for x in sorted(random.sample(enumerate(ITEMS_TOP_100), TEST_ITEM_NUM))]
+    ITEMS = random.sample(ITEMS_TOP_100, TEST_ITEM_NUM)
 
 def load_user_item_similarity():
     """
@@ -444,7 +444,7 @@ def user_num_greedy(input_groups, items, normalized_costs, slots, S):
     groups = sorted(groups, key=lambda x: USER_NUM_COSTS[x], reverse=True)
     for group in groups: # group id is KOL
         similarity = 0
-        best_item = items[0]
+        best_item = random.choice(items)
         for item in items: # select the best time for the KOL
             if group in SIM and item in SIM[group] and SIM[group][item] > similarity:
                 best_item = item
@@ -460,7 +460,7 @@ def network_value_greedy(input_groups, items, normalized_costs, slots, S):
     groups = sorted(groups, key=lambda x: NET_COSTS[x], reverse=True)
     for group in groups: # group id is KOL
         similarity = 0
-        best_item = items[0]
+        best_item = random.choice(items)
         for item in items: # select the best time for the KOL
             if group in SIM and item in SIM[group] and SIM[group][item] > similarity:
                 best_item = item
@@ -646,26 +646,28 @@ if __name__ == '__main__':
             print csd_finished - simulation_finished, ' seconds'
             csd_greedy_utilities.append(real_result)
 
-            ###### user number greedy ############
-            user_num_greedy_results = user_num_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-            real_result = simulate_final_utility(user_num_greedy_results[0])
-            print 'user number greedy:', user_num_greedy_results, real_result
-            # logger.info('user number greedy: {}'.format(user_num_greedy_results))
-            ung_finished = time.clock()
-            print ung_finished - csd_finished, ' seconds'
-            user_number_greedy_utilities.append(real_result)
+            for iii in range(10):
+                ###### user number greedy ############
+                user_num_greedy_results = user_num_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
+                real_result = simulate_final_utility(user_num_greedy_results[0])
+                print 'user number greedy:', user_num_greedy_results, real_result
+                # logger.info('user number greedy: {}'.format(user_num_greedy_results))
+                ung_finished = time.clock()
+                print ung_finished - csd_finished, ' seconds'
+                user_number_greedy_utilities.append(real_result)
 
-            ##### network value greedy ########
-            network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-            real_result = simulate_final_utility(network_value_greedy_results[0])
-            print 'network value greedy:', network_value_greedy_results, real_result
-            # logger.info('network value greedy: {}'.format(network_value_greedy_results))
-            nvg_finished = time.clock()
-            print nvg_finished - ung_finished, ' seconds'
-            network_value_greedy_utilities.append(real_result)            
+            for iii in range(10):
+                ##### network value greedy ########
+                network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
+                real_result = simulate_final_utility(network_value_greedy_results[0])
+                print 'network value greedy:', network_value_greedy_results, real_result
+                # logger.info('network value greedy: {}'.format(network_value_greedy_results))
+                nvg_finished = time.clock()
+                print nvg_finished - ung_finished, ' seconds'
+                network_value_greedy_utilities.append(real_result)
 
-            ####### random greedy ###############
-            for iii in range(5):
+            for iii in range(10):
+                ####### random greedy ###############
                 random_results = random_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
                 real_result = simulate_final_utility(random_results[0])
                 print 'random greedy:', random_results, real_result
