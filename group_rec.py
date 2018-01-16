@@ -14,8 +14,8 @@ conn = pymysql.connect(host='127.0.0.1',
 
 TOTAL_GROUP_NUM = 100
 
-TEST_ITEM_NUM = 100 # the number of items used in the test
-TEST_GROUP_NUM = 100 # the number of groups used in the test
+TEST_ITEM_NUM = 60 # the number of items used in the test
+TEST_GROUP_NUM = 60 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -24,6 +24,8 @@ USER_NUM_COSTS = {}
 NET_COSTS = {}
 COSTS = {}
 GROUPS = []
+ALL_ITEMS = []
+ALL_ITEM_REVENUE = {}
 ITEMS = []
 ITEMS_COUNT = {}
 ITEM_FANS = {}
@@ -41,13 +43,15 @@ DATA_DIR = './facebook'
 CACHE_UTILITY = {}
 CACHE_HIT_USERS = {}
 
-def init_slots(k=SLOT_NUM):
+def init_slots(k):
+    global SLOT_NUM
+    SLOT_NUM = k
     for group in GROUP_USERS:
         SLOTS[group] = k
 
 def load_all_simulated_hits():
     groups = GROUP_USERS.keys()
-    items = ITEMS
+    items = ALL_ITEMS
     print 'group len:', len(groups), 'item len:', len(items)
     for idx, group in enumerate(groups):
         print idx, group
@@ -70,21 +74,24 @@ def load_simulated_hits(group_id, item_id):
 def load_groups():
     global GROUPS
     GROUPS = random.sample(GROUP_USERS.keys(), TEST_GROUP_NUM)
+    return GROUPS
 
 def load_items():
     """
     read item list from file
     """
-    global ITEMS
+    global ITEMS, ALL_ITEMS
     with open("{}/item_list".format(DATA_DIR)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ITEMS.append(item)
                 ITEMS_COUNT[item] = int(item_count)
-    ITEMS_TOP_100 = ITEMS[0:100]
-    # ITEMS = [x[1] for x in sorted(random.sample(enumerate(ITEMS_TOP_100), TEST_ITEM_NUM))]
-    ITEMS = random.sample(ITEMS_TOP_100, TEST_ITEM_NUM)
+    ALL_ITEMS = ITEMS[0:100]
+    for item in ALL_ITEMS:
+        ALL_ITEM_REVENUE[item] = np.random.normal(1, 0.1)
+    ITEMS = random.sample(ALL_ITEMS, TEST_ITEM_NUM)
+    return ITEMS
 
 def load_user_item_similarity():
     """
@@ -181,10 +188,8 @@ def utility_user_count(hit_users):
 def utility_unit_revenue(hit_users):
     revenue = 0
     for item in hit_users:
-        revenue += len(hit_users[item])
+        revenue += len(hit_users[item]) # * ALL_ITEM_REVENUE[item]
     return revenue
-
-UTILITY_FUNCTION = utility_user_count # utility_user_count, utility_unit_revenue
 
 def utility_monte_carlo(rec_pairs):
     K = 1000 # simulation times
@@ -540,6 +545,7 @@ def get_result_str(result_array):
     return result_str
 
 if __name__ == '__main__':
+    UTILITY_FUNCTION = utility_user_count # utility_user_count, utility_unit_revenue
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook_music")
@@ -556,7 +562,7 @@ if __name__ == '__main__':
     load_user_item_similarity()
     load_items()
     load_groups()
-    init_slots()
+    init_slots(SLOT_NUM)
     initialize_finished = time.clock()
     print 'initialization finished: ', initialize_finished - start, ' seconds'
 
@@ -570,15 +576,8 @@ if __name__ == '__main__':
     # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
 
     # # load cache hit users (may delete)
-    # for i in range(n_worker*k_worker):
-    #     CACHE_HIT_USERS[i] = {}
-    # i = 0
     # for job in jobs:
     #     hit_users = job()
-    #     for rec_pair in hit_users:
-    #         for j in range(i*k_worker, (i+1)*k_worker):
-    #             CACHE_HIT_USERS[j][rec_pair] = hit_users[rec_pair][j-i*k_worker]
-    #     i += 1
 
     load_all_simulated_hits()
     simulation_finished = time.clock()
@@ -593,12 +592,17 @@ if __name__ == '__main__':
     #     candidates.append((list(ITEMS), list(GROUPS)))
 
     # for bud in [1.5, 2.0, 2.5]:
-    # for s in [1, ]:
-    for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
+
+    candidate_group_items = []
+    for i in range(repeat_times):
+        candidate_group_items.append((load_groups(), load_items()))
+
+    for s in [1,2,3]:
+    # for item_num, group_num in [(60, 60),]:
 
         #### for varying item and group numbers
-        TEST_GROUP_NUM = group_num
-        TEST_ITEM_NUM = item_num
+        # TEST_GROUP_NUM = group_num
+        # TEST_ITEM_NUM = item_num
         
         if TEST_ITEM_NUM == 100 and TEST_GROUP_NUM == TOTAL_GROUP_NUM:
              repeat_times = 1
@@ -608,7 +612,7 @@ if __name__ == '__main__':
         # load_group_costs() # reload cost for normalization
         
         ##### for varying slots
-        # init_slots(s)
+        init_slots(s)
 
         logger.info('=========== new run ==========')
 
@@ -631,10 +635,12 @@ if __name__ == '__main__':
         #     GROUPS = gr
         #     ITEMS = it
 
-        for i in range(repeat_times):
+        for group_item_pair in candidate_group_items:
             # each time re-select the items and groups
-            load_items()
-            load_groups()
+            # load_items()
+            # load_groups()
+            GROUPS = group_item_pair[0]
+            ITEMS = group_item_pair[1]
 
             print 'GROUPS', GROUPS
             print 'ITEMS', ITEMS
