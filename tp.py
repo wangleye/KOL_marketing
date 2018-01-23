@@ -8,7 +8,24 @@ conn = pymysql.connect(host='127.0.0.1',
     db='all0504')
 
 KOLs = []
+KOL_users = []
 user_item_likes = {}
+top_100_items = set()
+
+def load_all_items():
+    """
+    read item list from file
+    """
+    ALL_ITEMS = []
+    with open("./facebook/item_list") as inputfile:
+        for line in inputfile:
+            if len(line.strip()) > 0:
+                item, item_count = line.split()
+                ALL_ITEMS.append(item)
+    ALL_ITEMS = ALL_ITEMS[0:100]
+    for item in ALL_ITEMS:
+        top_100_items.add(item)
+
 
 def read_user_item_preference():
     x = conn.cursor()
@@ -19,7 +36,7 @@ def read_user_item_preference():
         moviestr_items = set(result[1].split(';'))
         if '' in moviestr_items:
             moviestr_items.remove('')
-        user_item_likes[user_id] = moviestr_items
+        user_item_likes[user_id] = moviestr_items - top_100_items
 
 def read_KOLs():
     # read kol file
@@ -28,7 +45,9 @@ def read_KOLs():
             if len(line.strip()) > 0:
                 words = line.strip().split(';')
                 group_id = words[0]
+                users = set(words[1].split())
                 KOLs.append(group_id)
+                KOL_users.append(users)
 
 def calculate_influence_probability():
     # generate the probability matrix indicating kol i influencing kol j
@@ -46,6 +65,20 @@ def calculate_influence_probability():
             else:
                 P[i,j] = 0
     return P
+
+def construct_features():
+    n = len(KOLs)
+    SI = np.asmatrix(np.zeros((n,n)))
+    SE = np.asmatrix(np.zeros((n,n)))
+    PS = np.asmatrix(np.zeros((n,n)))
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                if KOLs[j] in KOL_users[i]:
+                    SI[i,j] = 1
+                SE[i,j] = len(KOL_users[i] & KOL_users[j])
+                PS[i,j] = len(user_item_likes[KOLs[i]] & user_item_likes[KOLs[j]])
+    return SI, SE, PS
 
 def iterative_calculate_tp_score(P):
     n = len(KOLs)
@@ -66,6 +99,7 @@ def iterative_calculate_tp_score(P):
 
 if __name__ == '__main__':
     print("read user liked movies...")
+    load_all_items()
     read_user_item_preference()
     print("read KOLs...")
     read_KOLs()

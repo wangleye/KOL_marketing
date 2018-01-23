@@ -13,6 +13,7 @@ conn = pymysql.connect(host='127.0.0.1',
     db='all0504')
 
 TOTAL_GROUP_NUM = 100
+TOTAL_ITEM_NUM = 100
 
 TEST_ITEM_NUM = 20 # the number of items used in the test
 TEST_GROUP_NUM = 20 # the number of groups used in the test
@@ -86,7 +87,7 @@ def load_all_items():
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
-    ALL_ITEMS = ALL_ITEMS[0:99]
+    ALL_ITEMS = ALL_ITEMS[0:TOTAL_ITEM_NUM]
     for item in ALL_ITEMS:
         ALL_ITEM_REVENUE[item] = 1 # np.random.normal(1, 0.1)
 
@@ -433,7 +434,8 @@ def cost_greedy(groups, items, normalized_costs, slots, S):
         new_pair, utility_increase, utility = find_max_utility_per_cost_increase(groups, items, normalized_costs, slots, S)
     return S, max_utility
 
-def random_greedy(input_groups, items, normalized_costs, slots, S):
+def random_greedy(input_groups, items, normalized_costs, slots):
+    S = set()
     groups = input_groups[:]
     max_utility = utility_monte_carlo(S)
     rand_group = random.choice(groups)
@@ -587,7 +589,7 @@ def evaluate(test_method, method_name):
     results = test_method(GROUPS, ITEMS, COSTS, SLOTS)
     real_result = simulate_final_utility(results[0])
     print method_name, ":", results, real_result
-    # logger.info('CSD greedy: {}'.format(csd_greedy_results))
+    # logger.info('CSD greedy: {}'.format(results))
     finished = time.clock()
     print finished - started, ' seconds'
     return real_result
@@ -644,14 +646,14 @@ if __name__ == '__main__':
 
     # for s in [1,2,3]:
     # for bud in [1.0, ]:
-    # for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
-    for item_num, group_num in [(99, 100),]:
+    for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
+    # for item_num, group_num in [(100, 100),]:
 
         #### for varying item and group numbers
         TEST_GROUP_NUM = group_num
         TEST_ITEM_NUM = item_num
         
-        if TEST_ITEM_NUM == 100 and TEST_GROUP_NUM == TOTAL_GROUP_NUM:
+        if TEST_GROUP_NUM == TOTAL_GROUP_NUM:
              repeat_times = 1
         
         ##### for varying budget
@@ -696,11 +698,13 @@ if __name__ == '__main__':
             ###### CSD greedy ###################
             csd_greedy_utilities.append(evaluate(CSD_greedy, "CSDB"))
 
-            ###### user number greedy ############
-            user_number_greedy_utilities.append(evaluate(user_num_greedy, "AS"))
+            for iii in range(10):
+                ###### user number greedy ############
+                user_number_greedy_utilities.append(evaluate(user_num_greedy, "AS"))
 
-            ##### network value greedy ########
-            network_value_greedy_utilities.append(evaluate(network_value_greedy, 'NV'))
+            for iii in range(10):
+                ##### network value greedy ########
+                network_value_greedy_utilities.append(evaluate(network_value_greedy, 'NV'))
 
             ##### tp greedy ########
             tp_greedy_utilities.append(evaluate(tp_greedy, 'TP'))
