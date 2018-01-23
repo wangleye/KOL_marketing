@@ -14,12 +14,13 @@ conn = pymysql.connect(host='127.0.0.1',
 
 TOTAL_GROUP_NUM = 100
 
-TEST_ITEM_NUM = 60 # the number of items used in the test
-TEST_GROUP_NUM = 60 # the number of groups used in the test
+TEST_ITEM_NUM = 20 # the number of items used in the test
+TEST_GROUP_NUM = 20 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
 GROUP_CSD = {}
+GROUP_TP_RANK = {}
 USER_NUM_COSTS = {}
 NET_COSTS = {}
 COSTS = {}
@@ -27,7 +28,6 @@ GROUPS = []
 ALL_ITEMS = []
 ALL_ITEM_REVENUE = {}
 ITEMS = []
-ITEMS_COUNT = {}
 ITEM_FANS = {}
 USER_FRIENDS = {}
 SLOTS = {}
@@ -76,20 +76,25 @@ def load_groups():
     GROUPS = random.sample(GROUP_USERS.keys(), TEST_GROUP_NUM)
     return GROUPS
 
-def load_items():
+def load_all_items():
     """
     read item list from file
     """
-    global ITEMS, ALL_ITEMS
+    global ALL_ITEMS
     with open("{}/item_list".format(DATA_DIR)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 item, item_count = line.split()
-                ITEMS.append(item)
-                ITEMS_COUNT[item] = int(item_count)
-    ALL_ITEMS = ITEMS[0:100]
+                ALL_ITEMS.append(item)
+    ALL_ITEMS = ALL_ITEMS[0:99]
     for item in ALL_ITEMS:
-        ALL_ITEM_REVENUE[item] = np.random.normal(1, 0.1)
+        ALL_ITEM_REVENUE[item] = 1 # np.random.normal(1, 0.1)
+
+def load_items():
+    """
+    read item list from file
+    """
+    global ITEMS
     ITEMS = random.sample(ALL_ITEMS, TEST_ITEM_NUM)
     return ITEMS
 
@@ -157,6 +162,7 @@ def load_group_users_and_csd():
     """
     return groups
     """
+    max_user_group_count = 0
     with open("{}/KOL_audience".format(DATA_DIR)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
@@ -164,6 +170,10 @@ def load_group_users_and_csd():
                 group_id = words[0]
                 users = words[1].split()
                 GROUP_USERS[group_id] = users
+                if len(users) > max_user_group_count:
+                    max_user_group_count = len(users)
+
+    print('user number of the largest group:', max_user_group_count)
 
     with open("{}/KOL_CSD".format(DATA_DIR)) as inputfile:
         for line in inputfile:
@@ -172,6 +182,14 @@ def load_group_users_and_csd():
                 group_id = words[0]
                 csd = float(words[1])
                 GROUP_CSD[group_id] = csd
+
+    count = 1
+    with open("{}/KOL_tp_rankedlist".format(DATA_DIR)) as inputfile:
+        for line in inputfile:
+            if len(line.strip()) > 0:
+                group_id = line.strip()
+                GROUP_TP_RANK[group_id] = count
+                count += 1
 
 def set2key(s):
     """
@@ -432,10 +450,11 @@ def random_greedy(input_groups, items, normalized_costs, slots, S):
         new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], [item,], normalized_costs, slots, S)
     return S, max_utility
 
-def CSD_greedy(input_groups, items, normalized_costs, slots, S):
-    return baseline_greedy(input_groups, items, normalized_costs, slots, S, GROUP_CSD)
+def CSD_greedy(input_groups, items, normalized_costs, slots):
+    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_CSD)
 
-def baseline_greedy(input_groups, items, normalized_costs, slots, S, sort_reference):
+def baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference):
+    S = set()
     groups = input_groups[:]
     groups = sorted(groups, key=lambda x: sort_reference[x], reverse=True)
     max_utility = utility_monte_carlo(S)
@@ -446,7 +465,8 @@ def baseline_greedy(input_groups, items, normalized_costs, slots, S, sort_refere
             max_utility = utility
     return S, max_utility
 
-def user_num_greedy(input_groups, items, normalized_costs, slots, S):
+def user_num_greedy(input_groups, items, normalized_costs, slots):
+    S = set()
     groups = input_groups[:]
     groups = sorted(groups, key=lambda x: USER_NUM_COSTS[x], reverse=True)
     for group in groups: # group id is KOL
@@ -462,9 +482,27 @@ def user_num_greedy(input_groups, items, normalized_costs, slots, S):
             max_utility = utility
     return S, max_utility
 
-def network_value_greedy(input_groups, items, normalized_costs, slots, S):
+def network_value_greedy(input_groups, items, normalized_costs, slots):
+    S = set()
     groups = input_groups[:]
     groups = sorted(groups, key=lambda x: NET_COSTS[x], reverse=True)
+    for group in groups: # group id is KOL
+        similarity = 0
+        best_item = random.choice(items)
+        for item in items: # select the best time for the KOL
+            if group in SIM and item in SIM[group] and SIM[group][item] > similarity:
+                best_item = item
+                similarity = SIM[group][item]
+        new_pair, utility_increase, utility = find_max_utility_increase([group,], [best_item,], normalized_costs, slots, S)
+        if new_pair != None:
+            S = S.union({new_pair})
+            max_utility = utility
+    return S, max_utility
+
+def tp_greedy(input_groups, items, normalized_costs, slots):
+    S = set()
+    groups = input_groups[:]
+    groups = sorted(groups, key=lambda x: GROUP_TP_RANK[x], reverse=False)
     for group in groups: # group id is KOL
         similarity = 0
         best_item = random.choice(items)
@@ -544,8 +582,18 @@ def get_result_str(result_array):
     result_str = str(np.mean(np.asarray(result_array)))
     return result_str
 
+def evaluate(test_method, method_name):
+    started = time.clock()
+    results = test_method(GROUPS, ITEMS, COSTS, SLOTS)
+    real_result = simulate_final_utility(results[0])
+    print method_name, ":", results, real_result
+    # logger.info('CSD greedy: {}'.format(csd_greedy_results))
+    finished = time.clock()
+    print finished - started, ' seconds'
+    return real_result
+
 if __name__ == '__main__':
-    UTILITY_FUNCTION = utility_user_count # utility_user_count, utility_unit_revenue
+    UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook_music")
@@ -560,8 +608,7 @@ if __name__ == '__main__':
     load_group_users_and_csd()
     load_group_costs()
     load_user_item_similarity()
-    load_items()
-    load_groups()
+    load_all_items()
     init_slots(SLOT_NUM)
     initialize_finished = time.clock()
     print 'initialization finished: ', initialize_finished - start, ' seconds'
@@ -584,25 +631,25 @@ if __name__ == '__main__':
     print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
     # simulate groups and items
-    repeat_times = 10
+    repeat_times = 100
     # candidates = []
     # for i in range(repeat_times):
     #     load_items()
     #     load_groups()
     #     candidates.append((list(ITEMS), list(GROUPS)))
 
-    # for bud in [1.5, 2.0, 2.5]:
+    # candidate_group_items = []
+    # for i in range(repeat_times):
+       # candidate_group_items.append((load_groups(), load_items()))
 
-    candidate_group_items = []
-    for i in range(repeat_times):
-        candidate_group_items.append((load_groups(), load_items()))
-
-    for s in [1,2,3]:
-    # for item_num, group_num in [(60, 60),]:
+    # for s in [1,2,3]:
+    # for bud in [1.0, ]:
+    # for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
+    for item_num, group_num in [(99, 100),]:
 
         #### for varying item and group numbers
-        # TEST_GROUP_NUM = group_num
-        # TEST_ITEM_NUM = item_num
+        TEST_GROUP_NUM = group_num
+        TEST_ITEM_NUM = item_num
         
         if TEST_ITEM_NUM == 100 and TEST_GROUP_NUM == TOTAL_GROUP_NUM:
              repeat_times = 1
@@ -612,7 +659,7 @@ if __name__ == '__main__':
         # load_group_costs() # reload cost for normalization
         
         ##### for varying slots
-        init_slots(s)
+        #init_slots(s)
 
         logger.info('=========== new run ==========')
 
@@ -626,103 +673,56 @@ if __name__ == '__main__':
         csd_greedy_utilities = []
         user_number_greedy_utilities = []
         network_value_greedy_utilities = []
+        tp_greedy_utilities = []
         random_utilities = []
-        simple_greedy_utilities = []
-        cost_greedy_utilities = []
         our_utilities = []
         
         # for it, gr in candidates:
         #     GROUPS = gr
         #     ITEMS = it
 
-        for group_item_pair in candidate_group_items:
+        #for group_item_pair in candidate_group_items:
+        for i in range(repeat_times):
             # each time re-select the items and groups
-            # load_items()
-            # load_groups()
-            GROUPS = group_item_pair[0]
-            ITEMS = group_item_pair[1]
+            ITEMS = load_items()
+            GROUPS = load_groups()
+
+            #GROUPS = group_item_pair[0]
+            #ITEMS = group_item_pair[1]
 
             print 'GROUPS', GROUPS
             print 'ITEMS', ITEMS
 
             ###### CSD greedy ###################
-            csd_greedy_results = CSD_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-            real_result = simulate_final_utility(csd_greedy_results[0])
-            print 'CSD greedy:', csd_greedy_results, real_result
-            # logger.info('CSD greedy: {}'.format(csd_greedy_results))
-            csd_finished = time.clock()
-            print csd_finished - simulation_finished, ' seconds'
-            csd_greedy_utilities.append(real_result)
+            csd_greedy_utilities.append(evaluate(CSD_greedy, "CSDB"))
 
-            for iii in range(10):
-                ###### user number greedy ############
-                user_num_greedy_results = user_num_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-                real_result = simulate_final_utility(user_num_greedy_results[0])
-                print 'user number greedy:', user_num_greedy_results, real_result
-                # logger.info('user number greedy: {}'.format(user_num_greedy_results))
-                ung_finished = time.clock()
-                print ung_finished - csd_finished, ' seconds'
-                user_number_greedy_utilities.append(real_result)
+            ###### user number greedy ############
+            user_number_greedy_utilities.append(evaluate(user_num_greedy, "AS"))
 
-            for iii in range(10):
-                ##### network value greedy ########
-                network_value_greedy_results = network_value_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-                real_result = simulate_final_utility(network_value_greedy_results[0])
-                print 'network value greedy:', network_value_greedy_results, real_result
-                # logger.info('network value greedy: {}'.format(network_value_greedy_results))
-                nvg_finished = time.clock()
-                print nvg_finished - ung_finished, ' seconds'
-                network_value_greedy_utilities.append(real_result)
+            ##### network value greedy ########
+            network_value_greedy_utilities.append(evaluate(network_value_greedy, 'NV'))
+
+            ##### tp greedy ########
+            tp_greedy_utilities.append(evaluate(tp_greedy, 'TP'))
 
             for iii in range(10):
                 ####### random greedy ###############
-                random_results = random_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-                real_result = simulate_final_utility(random_results[0])
-                print 'random greedy:', random_results, real_result
-                # logger.info('random greedy: {}'.format(random_results))
-                rg_finished = time.clock()
-                print rg_finished - nvg_finished, ' seconds'
-                random_utilities.append(real_result)
-
-            ###### simple greedy ###################
-            simple_greedy_results = simple_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-            real_result = simulate_final_utility(simple_greedy_results[0])
-            print 'simple greedy:', simple_greedy_results, real_result
-            # logger.info('simple greedy: {}'.format(simple_greedy_results))
-            sg_finished = time.clock()
-            print sg_finished - rg_finished, ' seconds'
-            simple_greedy_utilities.append(real_result)
-
-            ###### cost greedy ###################
-            cost_greedy_results = cost_greedy(GROUPS, ITEMS, COSTS, SLOTS, set())
-            real_result = simulate_final_utility(cost_greedy_results[0])
-            print 'cost greedy:', cost_greedy_results, real_result
-            # logger.info('cost greedy: {}'.format(cost_greedy_results))
-            cg_finished = time.clock()
-            print cg_finished - sg_finished, ' seconds'
-            cost_greedy_utilities.append(real_result)
+                random_utilities.append(evaluate(random_greedy, 'RAN'))
 
             ###### our method ###################
-            our_method_results = near_opt_group_rec(GROUPS, ITEMS, COSTS, SLOTS)
-            real_result = simulate_final_utility(our_method_results[0])
-            print 'our method:', our_method_results, real_result
-            # logger.info('our method: {}'.format(our_method_results))
-            our_finished = time.clock()
-            print our_finished - cg_finished, ' seconds'
-            our_utilities.append(real_result)
+            our_utilities.append(evaluate(near_opt_group_rec, 'CEIL'))
 
         csd_result = get_result_str(csd_greedy_utilities)
         ung_result = get_result_str(user_number_greedy_utilities)
         nvg_result = get_result_str(network_value_greedy_utilities)
+        tpg_result = get_result_str(tp_greedy_utilities)
         rand_result = get_result_str(random_utilities)
-        sg_result = get_result_str(simple_greedy_utilities)
-        cg_result = get_result_str(cost_greedy_utilities)
         our_result = get_result_str(our_utilities)
 
-        result_str = 'random: {}, user number: {}, net value: {}, csd: {}, simple: {}, cost: {}, our: {}'.format(rand_result, ung_result, nvg_result, csd_result, sg_result, cg_result, our_result)
+        result_str = 'random: {}, user number: {}, net value: {}, tp: {}, csd: {}, our: {}'.format(rand_result, ung_result, nvg_result, tpg_result, csd_result, our_result)
         # result_str = 'random: {}, csd: {}'.format(rand_result, csd_result)
         print result_str
         parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION)
         logger.info(parameter_setting)
         logger.info(result_str)
-        logger.info("{} {} {} {} {}".format(rand_result, ung_result, nvg_result, csd_result, our_result))
+        logger.info("{} {} {} {} {} {}".format(rand_result, ung_result, nvg_result, tpg_result, csd_result, our_result))
