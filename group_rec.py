@@ -15,8 +15,8 @@ conn = pymysql.connect(host='127.0.0.1',
 TOTAL_GROUP_NUM = 100
 TOTAL_ITEM_NUM = 100
 
-TEST_ITEM_NUM = 20 # the number of items used in the test
-TEST_GROUP_NUM = 20 # the number of groups used in the test
+TEST_ITEM_NUM = 100 # the number of items used in the test
+TEST_GROUP_NUM = 100 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -594,6 +594,29 @@ def evaluate(test_method, method_name):
     print finished - started, ' seconds'
     return real_result
 
+
+def test_utility_difference():
+    uitlity_est_vector = []
+    utility_act_vector = []
+    for item in ITEMS:
+        print item
+        for group in GROUPS:
+            utility_est = utility_monte_carlo([(item, group),])
+            utility_act = simulate_final_utility([(item, group),])
+            uitlity_est_vector.append(utility_est*1.0/len(GROUP_USERS[group]))
+            utility_act_vector.append(utility_act*1.0/len(GROUP_USERS[group]))
+
+    uitlity_est_vector = np.array(uitlity_est_vector)
+    utility_act_vector = np.array(utility_act_vector)
+
+    print 'mean utility_est_vector', np.mean(uitlity_est_vector)
+    print 'mean utility_act_vector', np.mean(utility_act_vector)
+    print 'mean difference', np.mean(np.abs(uitlity_est_vector-utility_act_vector))
+
+    np.savetxt('estimate_utility', uitlity_est_vector)
+    np.savetxt('actual_utility', utility_act_vector)
+
+
 if __name__ == '__main__':
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
 
@@ -633,7 +656,15 @@ if __name__ == '__main__':
     print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
     # simulate groups and items
-    repeat_times = 100
+    repeat_times = 20
+
+    # test utility difference
+    print 'test utility difference...'
+    load_items()
+    load_groups()
+    test_utility_difference()
+    print 'test utility difference donw'
+
     # candidates = []
     # for i in range(repeat_times):
     #     load_items()
@@ -646,7 +677,7 @@ if __name__ == '__main__':
 
     # for s in [1,2,3]:
     # for bud in [1.0, ]:
-    for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
+    for item_num, group_num in [(60, 60), (80, 80), (100, 100)]:
     # for item_num, group_num in [(100, 100),]:
 
         #### for varying item and group numbers
