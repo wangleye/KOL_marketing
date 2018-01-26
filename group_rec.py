@@ -15,8 +15,8 @@ conn = pymysql.connect(host='127.0.0.1',
 TOTAL_GROUP_NUM = 100
 TOTAL_ITEM_NUM = 100
 
-TEST_ITEM_NUM = 100 # the number of items used in the test
-TEST_GROUP_NUM = 100 # the number of groups used in the test
+TEST_ITEM_NUM = 20 # the number of items used in the test
+TEST_GROUP_NUM = 20 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -242,6 +242,8 @@ def utility_monte_carlo(rec_pairs):
 def find_max_utility(groups, items, costs, rho=0):
     max_utility = 0
     for g in groups:
+        if COSTS[g] > 1:
+            continue
         for i in items:
             recommend_pairs = {(i,g)} # initialize a set containing only one recommendation
             utility_ig = utility_monte_carlo(recommend_pairs)
@@ -617,13 +619,38 @@ def test_utility_difference():
     np.savetxt('actual_utility', utility_act_vector)
 
 
+def evaluate_utility_estimation_effect():
+    utility_est = np.loadtxt('estimate_utility').reshape((100,100))
+    utility_act = np.loadtxt('actual_utility').reshape((100,100))
+
+    estimate_top_utility_index = np.argmax(utility_est, axis=1)
+    true_utility_of_estimate = np.zeros(100)
+
+    for i in range(100):
+        true_utility_of_estimate[i] = utility_act[i, estimate_top_utility_index[i]]
+
+    true_top_utility = np.max(utility_act, axis=1)
+    print(true_top_utility)
+    print(np.mean(true_top_utility))
+    print(np.mean(true_utility_of_estimate))
+
+    random_estimate = np.zeros(100)
+    for i in range(100):
+        random_estimate[i] = utility_act[i, random.randint(0,99)]
+    print(np.mean(random_estimate))
+
+
+
 if __name__ == '__main__':
+
+    # evaluate_utility_estimation_effect()
+
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook_music")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler('evaluation_results.log')
+    fh = logging.FileHandler('evaluation_results_2.log')
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
@@ -659,40 +686,33 @@ if __name__ == '__main__':
     repeat_times = 20
 
     # test utility difference
-    print 'test utility difference...'
-    load_items()
-    load_groups()
-    test_utility_difference()
-    print 'test utility difference donw'
+    # print 'test utility difference...'
+    # load_items()
+    # load_groups()
+    # test_utility_difference()
+    # print 'test utility difference donw'
 
-    # candidates = []
-    # for i in range(repeat_times):
-    #     load_items()
-    #     load_groups()
-    #     candidates.append((list(ITEMS), list(GROUPS)))
+    candidate_group_items = []
+    for i in range(repeat_times):
+       candidate_group_items.append((load_groups(), load_items()))
 
-    # candidate_group_items = []
-    # for i in range(repeat_times):
-       # candidate_group_items.append((load_groups(), load_items()))
-
-    # for s in [1,2,3]:
-    # for bud in [1.0, ]:
-    for item_num, group_num in [(60, 60), (80, 80), (100, 100)]:
-    # for item_num, group_num in [(100, 100),]:
+    # for s in [1,]:
+    for bud in range(5, 31):
+    # for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
 
         #### for varying item and group numbers
-        TEST_GROUP_NUM = group_num
-        TEST_ITEM_NUM = item_num
+       # TEST_GROUP_NUM = group_num
+        #TEST_ITEM_NUM = item_num
         
         if TEST_GROUP_NUM == TOTAL_GROUP_NUM:
              repeat_times = 1
         
         ##### for varying budget
-        # BUDGET = bud
-        # load_group_costs() # reload cost for normalization
+        BUDGET = bud/10.0
+        load_group_costs() # reload cost for normalization
         
         ##### for varying slots
-        #init_slots(s)
+        # init_slots(s)
 
         logger.info('=========== new run ==========')
 
@@ -709,19 +729,15 @@ if __name__ == '__main__':
         tp_greedy_utilities = []
         random_utilities = []
         our_utilities = []
-        
-        # for it, gr in candidates:
-        #     GROUPS = gr
-        #     ITEMS = it
 
-        #for group_item_pair in candidate_group_items:
-        for i in range(repeat_times):
+        for group_item_pair in candidate_group_items:
+        # for i in range(repeat_times):
             # each time re-select the items and groups
-            ITEMS = load_items()
-            GROUPS = load_groups()
+            # ITEMS = load_items()
+            # GROUPS = load_groups()
 
-            #GROUPS = group_item_pair[0]
-            #ITEMS = group_item_pair[1]
+            GROUPS = group_item_pair[0]
+            ITEMS = group_item_pair[1]
 
             print 'GROUPS', GROUPS
             print 'ITEMS', ITEMS
