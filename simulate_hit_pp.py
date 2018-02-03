@@ -5,7 +5,7 @@ import math
 import logging
 
 def save_hit_users_to_db(item, group, hit_users, alpha):
-    insert_statement = "INSERT INTO simulate_group_rec_new (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')".format(group, item, ','.join(hit_users), alpha)
+    insert_statement = "INSERT INTO simulate_group_rec_book (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')".format(group, item, ','.join(hit_users), alpha)
     x = conn.cursor()
     x.execute(insert_statement)
 
@@ -77,7 +77,8 @@ def friends(user_id):
 
 def sim_to_hit_prob(sim):
     # learned logistic / isonotic function
-    return 1.0/(1.0+math.exp(-(-4.103+1.607*sim)))
+    # return 1.0/(1.0+math.exp(-(-4.103+1.607*sim))) # for movie (con)
+    return 1.0/(1.0+math.exp(-(-5.233+5.972*sim))) # for book (con_v2_norm)
 
 # store the hit users calculated before
 def sim_hit_users(item, users_in_group, sim_dict, alpha):

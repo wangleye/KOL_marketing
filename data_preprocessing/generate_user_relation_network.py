@@ -20,7 +20,7 @@ conn = pymysql.connect(host='127.0.0.1',
 def get_item_set(num=100):
     item_set = set()
     count = 0
-    with open('../facebook/item_list') as input_item_file:
+    with open('../facebook/book_list') as input_item_file:
         for line in input_item_file:
             if line.strip() == '':
                 continue
@@ -34,7 +34,7 @@ def get_item_set(num=100):
 def read_user_item_preference(item_set):
     user_item_likes = {}
     x = conn.cursor()
-    x.execute("SELECT iduser, moviestr FROM user")
+    x.execute("SELECT iduser, bookstr FROM user")
     results = x.fetchall()
     for result in results:
         user_id = result[0]
@@ -62,7 +62,7 @@ def read_user_relationship(user_set):
 
 def read_item_similarity_from_file():
     SIM = {}
-    with open("../facebook/item_similarity") as inputfile:
+    with open("../facebook/book_similarity_con_v2_norm") as inputfile:
         for line in inputfile:
             line = line.strip()
             if len(line) > 0:
@@ -120,8 +120,8 @@ def user_item_affinity(user_id, target_item, consider_friend=False, indirect_fri
     return score
 
 def output_user_item_aff():
-    with open("user_item_aff_score_100_item_only_KOL_complete.csv", "w") as outputfile:
-        outputfile.write('user item score truth\n')
+    with open("user_book_aff_score_100_item_only_KOL_complete.csv", "w") as outputfile:
+        outputfile.write('user book score truth\n')
         for user in USER_SET:
             if user not in USER_PREF:
                 continue

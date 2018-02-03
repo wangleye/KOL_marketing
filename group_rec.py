@@ -27,9 +27,9 @@ NET_COSTS = {}
 COSTS = {}
 GROUPS = []
 ALL_ITEMS = []
-ALL_ITEM_REVENUE = {}
 ITEMS = []
 ITEM_FANS = {}
+ITEM_REVENUES = {}
 USER_FRIENDS = {}
 SLOTS = {}
 SLOT_NUM = 1
@@ -60,7 +60,7 @@ def load_all_simulated_hits():
             load_simulated_hits(group, item)
 
 def load_simulated_hits(group_id, item_id):
-    query_str = "select group_id, item_id, hit_users from simulate_group_rec_new where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(alpha-0.001, alpha+0.001, group_id, item_id)
+    query_str = "select group_id, item_id, hit_users from simulate_group_rec_book where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(alpha-0.001, alpha+0.001, group_id, item_id)
     x = conn.cursor()
     x.execute(query_str)
     results = x.fetchall()
@@ -82,14 +82,24 @@ def load_all_items():
     read item list from file
     """
     global ALL_ITEMS
-    with open("{}/item_list".format(DATA_DIR)) as inputfile:
+    with open("{}/book_list".format(DATA_DIR)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
     ALL_ITEMS = ALL_ITEMS[0:TOTAL_ITEM_NUM]
-    for item in ALL_ITEMS:
-        ALL_ITEM_REVENUE[item] = 1 # np.random.normal(1, 0.1)
+
+def load_item_revenues():
+    """
+    load revenues of items
+    """
+    global ITEM_REVENUES
+    with open("{}/book_price".format(DATA_DIR)) as inputfile:
+        for line in inputfile:
+            if len(line.strip()) > 0:
+                item, item_price = line.split()
+                ITEM_REVENUES[item] = float(item_price)
+
 
 def load_items():
     """
@@ -109,7 +119,7 @@ def load_user_item_similarity():
 def read_user_item_similarity_file_line_by_line():
     global SIM
     global ITEM_FANS
-    with open("{}/user_item_aff_score_100_item_only_KOL_complete".format(DATA_DIR)) as inputfile:
+    with open("{}/user_book_aff_score_100_item_only_KOL_complete".format(DATA_DIR)) as inputfile:
         first_line = True
         for line in inputfile:
             if first_line:
@@ -207,7 +217,12 @@ def utility_user_count(hit_users):
 def utility_unit_revenue(hit_users):
     revenue = 0
     for item in hit_users:
-        revenue += len(hit_users[item]) # * ALL_ITEM_REVENUE[item]
+        if item in ITEM_REVENUES:
+            item_r = ITEM_REVENUES[item]
+            print(item_r)
+        else:
+            item_r = 10
+        revenue += len(hit_users[item]) * item_r
     return revenue
 
 def utility_monte_carlo(rec_pairs):
@@ -650,7 +665,7 @@ if __name__ == '__main__':
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook_music")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler('evaluation_results_2.log')
+    fh = logging.FileHandler('evaluation_results.log')
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
@@ -661,6 +676,7 @@ if __name__ == '__main__':
     load_group_costs()
     load_user_item_similarity()
     load_all_items()
+    load_item_revenues()
     init_slots(SLOT_NUM)
     initialize_finished = time.clock()
     print 'initialization finished: ', initialize_finished - start, ' seconds'
@@ -672,8 +688,7 @@ if __name__ == '__main__':
     # k_worker = 250
     # # n_worker * k_worker is the number of simulations for each (item, group) pair
     # dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-    # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
-
+    # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
     # # load cache hit users (may delete)
     # for job in jobs:
     #     hit_users = job()
@@ -692,24 +707,24 @@ if __name__ == '__main__':
     # test_utility_difference()
     # print 'test utility difference donw'
 
-    candidate_group_items = []
-    for i in range(repeat_times):
-       candidate_group_items.append((load_groups(), load_items()))
+    # candidate_group_items = []
+    # for i in range(repeat_times):
+       # candidate_group_items.append((load_groups(), load_items()))
 
     # for s in [1,]:
-    for bud in range(5, 31):
-    # for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
+    # for bud in [10,]:
+    for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
 
         #### for varying item and group numbers
-       # TEST_GROUP_NUM = group_num
-        #TEST_ITEM_NUM = item_num
+        TEST_GROUP_NUM = group_num
+        TEST_ITEM_NUM = item_num
         
         if TEST_GROUP_NUM == TOTAL_GROUP_NUM:
              repeat_times = 1
         
         ##### for varying budget
-        BUDGET = bud/10.0
-        load_group_costs() # reload cost for normalization
+        #BUDGET = bud/10.0
+        #load_group_costs() # reload cost for normalization
         
         ##### for varying slots
         # init_slots(s)
@@ -730,14 +745,14 @@ if __name__ == '__main__':
         random_utilities = []
         our_utilities = []
 
-        for group_item_pair in candidate_group_items:
-        # for i in range(repeat_times):
+        # for group_item_pair in candidate_group_items:
+        for i in range(repeat_times):
             # each time re-select the items and groups
-            # ITEMS = load_items()
-            # GROUPS = load_groups()
+            ITEMS = load_items()
+            GROUPS = load_groups()
 
-            GROUPS = group_item_pair[0]
-            ITEMS = group_item_pair[1]
+            # GROUPS = group_item_pair[0]
+            # ITEMS = group_item_pair[1]
 
             print 'GROUPS', GROUPS
             print 'ITEMS', ITEMS
