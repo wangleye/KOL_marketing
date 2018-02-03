@@ -219,7 +219,6 @@ def utility_unit_revenue(hit_users):
     for item in hit_users:
         if item in ITEM_REVENUES:
             item_r = ITEM_REVENUES[item]
-            print(item_r)
         else:
             item_r = 10
         revenue += len(hit_users[item]) * item_r
@@ -469,13 +468,10 @@ def random_greedy(input_groups, items, normalized_costs, slots):
         new_pair, utility_increase, utility = find_max_utility_increase([rand_group,], [item,], normalized_costs, slots, S)
     return S, max_utility
 
-def CSD_greedy(input_groups, items, normalized_costs, slots):
-    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_CSD)
-
-def baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference):
+def baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
     S = set()
     groups = input_groups[:]
-    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=True)
+    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=is_reverse)
     max_utility = utility_monte_carlo(S)
     for group in groups:
         new_pair, utility_increase, utility = find_max_utility_increase([group,], items, normalized_costs, slots, S)
@@ -484,10 +480,10 @@ def baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference
             max_utility = utility
     return S, max_utility
 
-def user_num_greedy(input_groups, items, normalized_costs, slots):
+def KOL_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
     S = set()
     groups = input_groups[:]
-    groups = sorted(groups, key=lambda x: USER_NUM_COSTS[x], reverse=True)
+    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=is_reverse)
     for group in groups: # group id is KOL
         similarity = 0
         best_item = random.choice(items)
@@ -501,39 +497,74 @@ def user_num_greedy(input_groups, items, normalized_costs, slots):
             max_utility = utility
     return S, max_utility
 
-def network_value_greedy(input_groups, items, normalized_costs, slots):
+def audience_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
     S = set()
     groups = input_groups[:]
-    groups = sorted(groups, key=lambda x: NET_COSTS[x], reverse=True)
+    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=is_reverse)
     for group in groups: # group id is KOL
         similarity = 0
         best_item = random.choice(items)
         for item in items: # select the best time for the KOL
-            if group in SIM and item in SIM[group] and SIM[group][item] > similarity:
+            audience_score = audience_item_score(group, item)
+            if audience_score > similarity:
                 best_item = item
-                similarity = SIM[group][item]
+                similarity = audience_score
         new_pair, utility_increase, utility = find_max_utility_increase([group,], [best_item,], normalized_costs, slots, S)
         if new_pair != None:
             S = S.union({new_pair})
             max_utility = utility
     return S, max_utility
 
-def tp_greedy(input_groups, items, normalized_costs, slots):
-    S = set()
-    groups = input_groups[:]
-    groups = sorted(groups, key=lambda x: GROUP_TP_RANK[x], reverse=False)
-    for group in groups: # group id is KOL
-        similarity = 0
-        best_item = random.choice(items)
-        for item in items: # select the best time for the KOL
-            if group in SIM and item in SIM[group] and SIM[group][item] > similarity:
-                best_item = item
-                similarity = SIM[group][item]
-        new_pair, utility_increase, utility = find_max_utility_increase([group,], [best_item,], normalized_costs, slots, S)
-        if new_pair != None:
-            S = S.union({new_pair})
-            max_utility = utility
-    return S, max_utility
+def audience_item_score(group, item):
+    score = 0
+    for user in GROUP_USERS[group]:
+        if user in SIM and item in SIM[user]:
+            score += SIM[user][item]
+    return score
+
+def benchmark(input_groups, items, normalized_costs, slots, sort_reference, is_reverse, item_select_method):
+    if item_select_method == 'KP': # kol prefer
+        return KOL_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
+    if item_select_method == 'AP': # audience prefer
+        return audience_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
+    if item_select_method == 'BU': # best utility
+        return baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
+
+def CSD_KP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_CSD, True, 'KP')
+
+def CSD_AP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_CSD, True, 'AP')
+
+def CSD_BU(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_CSD, True, 'BU')
+
+def AS_KP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'KP')
+
+def AS_AP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'AP')
+
+def AS_BU(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'BU')
+
+def NV_KP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'KP')
+
+def NV_AP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'AP')
+
+def NV_BU(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'BU')
+
+def TP_KP(input_groups, items, normalized_costs, slots):
+    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'KP')
+
+def TP_AP(input_groups, items, normalized_costs, slots):
+    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'AP')
+
+def TP_BU(input_groups, items, normalized_costs, slots):
+    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'BU')
 
 # for simulating final results
 def simulate_final_utility(rec_pairs, simulation_times=10000):
@@ -698,7 +729,7 @@ if __name__ == '__main__':
     print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
     # simulate groups and items
-    repeat_times = 20
+    repeat_times = 10
 
     # test utility difference
     # print 'test utility difference...'
@@ -738,10 +769,10 @@ if __name__ == '__main__':
         print 'slots:', SLOT_NUM
         print 'utility:', UTILITY_FUNCTION
 
-        csd_greedy_utilities = []
-        user_number_greedy_utilities = []
-        network_value_greedy_utilities = []
-        tp_greedy_utilities = []
+        csd_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
+        as_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
+        nv_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
+        tp_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
         random_utilities = []
         our_utilities = []
 
@@ -758,18 +789,26 @@ if __name__ == '__main__':
             print 'ITEMS', ITEMS
 
             ###### CSD greedy ###################
-            csd_greedy_utilities.append(evaluate(CSD_greedy, "CSDB"))
+            csd_greedy_utilities['KP'].append(evaluate(CSD_KP, "CSD-KP"))
+            csd_greedy_utilities['AP'].append(evaluate(CSD_AP, "CSD-AP"))
+            csd_greedy_utilities['BU'].append(evaluate(CSD_BU, "CSD-BU"))
 
             for iii in range(10):
                 ###### user number greedy ############
-                user_number_greedy_utilities.append(evaluate(user_num_greedy, "AS"))
+                as_greedy_utilities['KP'].append(evaluate(AS_KP, "AS-KP"))
+                as_greedy_utilities['AP'].append(evaluate(AS_AP, "AS-AP"))
+                as_greedy_utilities['BU'].append(evaluate(AS_BU, "AS-BU"))
 
             for iii in range(10):
                 ##### network value greedy ########
-                network_value_greedy_utilities.append(evaluate(network_value_greedy, 'NV'))
+                nv_greedy_utilities['KP'].append(evaluate(NV_KP, 'NV-KP'))
+                nv_greedy_utilities['AP'].append(evaluate(NV_AP, 'NV-AP'))
+                nv_greedy_utilities['BU'].append(evaluate(NV_BU, 'NV-BU'))
 
             ##### tp greedy ########
-            tp_greedy_utilities.append(evaluate(tp_greedy, 'TP'))
+            tp_greedy_utilities['KP'].append(evaluate(TP_KP, 'TP-KP'))
+            tp_greedy_utilities['AP'].append(evaluate(TP_AP, 'TP-AP'))
+            tp_greedy_utilities['BU'].append(evaluate(TP_BU, 'TP-BU'))
 
             for iii in range(10):
                 ####### random greedy ###############
@@ -778,17 +817,30 @@ if __name__ == '__main__':
             ###### our method ###################
             our_utilities.append(evaluate(near_opt_group_rec, 'CEIL'))
 
-        csd_result = get_result_str(csd_greedy_utilities)
-        ung_result = get_result_str(user_number_greedy_utilities)
-        nvg_result = get_result_str(network_value_greedy_utilities)
-        tpg_result = get_result_str(tp_greedy_utilities)
+        csd_kp_result = get_result_str(csd_greedy_utilities['KP'])
+        csd_ap_result = get_result_str(csd_greedy_utilities['AP'])
+        csd_bu_result = get_result_str(csd_greedy_utilities['BU'])
+        as_kp_result = get_result_str(as_greedy_utilities['KP'])
+        as_ap_result = get_result_str(as_greedy_utilities['AP'])
+        as_bu_result = get_result_str(as_greedy_utilities['BU'])
+        nv_kp_result = get_result_str(nv_greedy_utilities['KP'])
+        nv_ap_result = get_result_str(nv_greedy_utilities['AP'])
+        nv_bu_result = get_result_str(nv_greedy_utilities['BU'])
+        tp_kp_result = get_result_str(tp_greedy_utilities['KP'])
+        tp_ap_result = get_result_str(tp_greedy_utilities['AP'])
+        tp_bu_result = get_result_str(tp_greedy_utilities['BU'])
         rand_result = get_result_str(random_utilities)
         our_result = get_result_str(our_utilities)
 
-        result_str = 'random: {}, user number: {}, net value: {}, tp: {}, csd: {}, our: {}'.format(rand_result, ung_result, nvg_result, tpg_result, csd_result, our_result)
-        # result_str = 'random: {}, csd: {}'.format(rand_result, csd_result)
-        print result_str
+        as_result_str = 'AS: {} {} {}'.format(as_kp_result, as_ap_result, as_bu_result)
+        logger.info(as_result_str)
+        nv_result_str = 'NV: {} {} {}'.format(nv_kp_result, nv_ap_result, nv_bu_result)
+        logger.info(nv_result_str)
+        tp_result_str = 'TP: {} {} {}'.format(tp_kp_result, tp_ap_result, tp_bu_result)
+        logger.info(tp_result_str)
+        csd_result_str = 'CSD: {} {} {}'.format(csd_kp_result, csd_ap_result, csd_bu_result)
+        logger.info(csd_result_str)
+        our_result_str = 'CEIL: {} RAN: {}'.format(our_result, rand_result)
+        logger.info(our_result_str)
         parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION)
         logger.info(parameter_setting)
-        logger.info(result_str)
-        logger.info("{} {} {} {} {} {}".format(rand_result, ung_result, nvg_result, tpg_result, csd_result, our_result))
