@@ -558,13 +558,13 @@ def NV_BU(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'BU')
 
 def TP_KP(input_groups, items, normalized_costs, slots):
-    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'KP')
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'KP')
 
 def TP_AP(input_groups, items, normalized_costs, slots):
-    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'AP')
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'AP')
 
 def TP_BU(input_groups, items, normalized_costs, slots):
-    return baseline_greedy(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'BU')
+    return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'BU')
 
 # for simulating final results
 def simulate_final_utility(rec_pairs, simulation_times=10000):
