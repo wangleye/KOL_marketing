@@ -60,7 +60,7 @@ def load_all_simulated_hits():
             load_simulated_hits(group, item)
 
 def load_simulated_hits(group_id, item_id):
-    query_str = "select group_id, item_id, hit_users from simulate_group_rec_book where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(alpha-0.001, alpha+0.001, group_id, item_id)
+    query_str = "select group_id, item_id, hit_users from simulate_group_rec_{} where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(SCENARIO, alpha-0.001, alpha+0.001, group_id, item_id)
     x = conn.cursor()
     x.execute(query_str)
     results = x.fetchall()
@@ -82,7 +82,7 @@ def load_all_items():
     read item list from file
     """
     global ALL_ITEMS
-    with open("{}/book_list".format(DATA_DIR)) as inputfile:
+    with open("{}/{}_list".format(DATA_DIR, SCENARIO)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 item, item_count = line.split()
@@ -94,7 +94,7 @@ def load_item_revenues():
     load revenues of items
     """
     global ITEM_REVENUES
-    with open("{}/book_price".format(DATA_DIR)) as inputfile:
+    with open("{}/{}_price".format(DATA_DIR, SCENARIO)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 item, item_price = line.split()
@@ -119,7 +119,7 @@ def load_user_item_similarity():
 def read_user_item_similarity_file_line_by_line():
     global SIM
     global ITEM_FANS
-    with open("{}/user_book_aff_score_100_item_only_KOL_complete".format(DATA_DIR)) as inputfile:
+    with open("{}/user_{}_aff_score_100_item_only_KOL_complete".format(DATA_DIR, SCENARIO)) as inputfile:
         first_line = True
         for line in inputfile:
             if first_line:
@@ -692,11 +692,12 @@ if __name__ == '__main__':
     # evaluate_utility_estimation_effect()
 
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
+    SCENARIO = 'movie' # book or movie
 
     # initialize logger file
-    logger = logging.getLogger("evaluation_facebook_music")
+    logger = logging.getLogger("evaluation_facebook")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler('evaluation_results.log')
+    fh = logging.FileHandler('evaluation_results_{}.log'.format(SCENARIO))
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
@@ -719,7 +720,7 @@ if __name__ == '__main__':
     # k_worker = 250
     # # n_worker * k_worker is the number of simulations for each (item, group) pair
     # dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-    # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+    # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
     # # load cache hit users (may delete)
     # for job in jobs:
     #     hit_users = job()
@@ -796,14 +797,14 @@ if __name__ == '__main__':
             for iii in range(10):
                 ###### user number greedy ############
                 as_greedy_utilities['KP'].append(evaluate(AS_KP, "AS-KP"))
-                as_greedy_utilities['AP'].append(evaluate(AS_AP, "AS-AP"))
-                as_greedy_utilities['BU'].append(evaluate(AS_BU, "AS-BU"))
+            as_greedy_utilities['AP'].append(evaluate(AS_AP, "AS-AP"))
+            as_greedy_utilities['BU'].append(evaluate(AS_BU, "AS-BU"))
 
             for iii in range(10):
                 ##### network value greedy ########
                 nv_greedy_utilities['KP'].append(evaluate(NV_KP, 'NV-KP'))
-                nv_greedy_utilities['AP'].append(evaluate(NV_AP, 'NV-AP'))
-                nv_greedy_utilities['BU'].append(evaluate(NV_BU, 'NV-BU'))
+            nv_greedy_utilities['AP'].append(evaluate(NV_AP, 'NV-AP'))
+            nv_greedy_utilities['BU'].append(evaluate(NV_BU, 'NV-BU'))
 
             ##### tp greedy ########
             tp_greedy_utilities['KP'].append(evaluate(TP_KP, 'TP-KP'))
