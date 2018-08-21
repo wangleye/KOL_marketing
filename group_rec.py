@@ -6,6 +6,8 @@ import math
 import pp
 import simulate_hit_pp as sh
 import logging
+from joblib import Parallel, delayed
+
 
 conn = pymysql.connect(host='127.0.0.1',
     user='root',
@@ -53,6 +55,7 @@ def load_all_simulated_hits():
     groups = GROUP_USERS.keys()
     items = ALL_ITEMS
     print 'group len:', len(groups), 'item len:', len(items)
+
     for idx, group in enumerate(groups):
         print idx, group
         for item in items:
@@ -349,7 +352,10 @@ def is_over_slot_constraint(selected_recs, slots, group_id):
     else:
         return False
 
-def near_opt_group_rec(groups, items, normalized_costs, slots):
+def near_opt_group_rec_no_speedup(groups, items, normalized_costs, slots):
+    return near_opt_group_rec(groups, items, normalized_costs, slots, False)
+
+def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True):
     M = find_max_utility(groups, items, normalized_costs)
     rho = M*1.0/2
     R = {}
@@ -361,24 +367,32 @@ def near_opt_group_rec(groups, items, normalized_costs, slots):
         if M_rho == 0:
             break
         tau = M_rho
-        S = set();
+        S = set()
+        last_utility_increase = {}
+        for g in groups:
+            for i in items:
+                last_utility_increase[(i,g)] = 100000 # set a large utility as the initial value
         while tau  >= epsilon*1.0 / n * M_rho and not is_over_budget(S, normalized_costs):
             # use shuffle to add randomness into the algorithm
             candidates = []
             for g in groups:
                 for i in items:
                     candidates.append((i,g))
-            random.shuffle(candidates)
+            # random.shuffle(candidates)
+            
             for i, g in candidates:
                 # lazy evaluation (speed-up)
-                utility_increase_max = utility_monte_carlo({(i,g)})
+                utility_increase_max = last_utility_increase[(i,g)]
                 if (i, g) in S or utility_increase_max < tau or utility_increase_max / normalized_costs[g] < rho or normalized_costs[g] > 1:
                     continue
 
                 S_prime = S.union({(i,g)})
+                utility_increase = utility_monte_carlo(S_prime) - utility_monte_carlo(S)
+                if speed_up:
+                    last_utility_increase[(i,g)] = utility_increase
                 if not is_over_slot_constraint(S_prime, slots, g) and \
-                utility_monte_carlo(S_prime) - utility_monte_carlo(S) >= tau and \
-                (utility_monte_carlo(S_prime) - utility_monte_carlo(S)) / normalized_costs[g] >= rho:
+                utility_increase >= tau and \
+                utility_increase / normalized_costs[g] >= rho:
                     if is_over_budget(S_prime, normalized_costs):
                         #R[str(rho)] = (S, utility_monte_carlo(S))
                         # local improvement - using S as base, simple/cost greedy
@@ -432,6 +446,9 @@ def get_max_value_from_R(R):
             max_rho = each_rho
     return max_S, max_utility, max_rho
 
+def simple_greedy_baseline(groups, items, normalized_costs, slots):
+    return simple_greedy(groups, items, normalized_costs, slots, set())
+
 def simple_greedy(groups, items, normalized_costs, slots, S):
     max_utility = utility_monte_carlo(S)
     new_pair, utility_increase, utility = find_max_utility_increase(groups, items, normalized_costs, slots, S)
@@ -440,6 +457,9 @@ def simple_greedy(groups, items, normalized_costs, slots, S):
         max_utility = utility
         new_pair, utility_increase, utility = find_max_utility_increase(groups, items, normalized_costs, slots, S)
     return S, max_utility
+
+def cost_greedy_baseline(groups, items, normalized_costs, slots):
+    return cost_greedy(groups, items, normalized_costs, slots, set())
 
 def cost_greedy(groups, items, normalized_costs, slots, S):
     max_utility = utility_monte_carlo(S)
@@ -690,10 +710,10 @@ if __name__ == '__main__':
 
     # evaluate_utility_estimation_effect()
 
-    UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
+    UTILITY_FUNCTION = utility_user_count # utility_user_count, utility_unit_revenue
     SCENARIO = 'movie' # book or movie
     alpha = 0.02
-    need_simulation = True
+    need_simulation = False
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
@@ -718,9 +738,9 @@ if __name__ == '__main__':
     if need_simulation:
         print 'start simulation in parallel'
         ppservers = ()
-        n_worker = 4
+        n_worker = 8
         job_server = pp.Server(n_worker, ppservers=ppservers) # create multiple processes
-        k_worker = 250
+        k_worker = int(1000/n_worker)
         # n_worker * k_worker is the number of simulations for each (item, group) pair
         dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
         jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i),\
@@ -734,7 +754,7 @@ if __name__ == '__main__':
     print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
     # simulate groups and items
-    repeat_times = 10
+    repeat_times = 5
 
     # test utility difference
     # print 'test utility difference...'
@@ -750,7 +770,7 @@ if __name__ == '__main__':
     # for s in [1, 2]:
     # for bud in [10,]:
     # for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
-    for item_num, group_num in [(20, 20),]:
+    for item_num, group_num in [(100, 100), (80, 80), (60, 60), (40, 40), (20, 20)]:
         #### for varying item and group numbers
         TEST_GROUP_NUM = group_num
         TEST_ITEM_NUM = item_num
@@ -779,6 +799,8 @@ if __name__ == '__main__':
         nv_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
         tp_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
         random_utilities = []
+        s_greedy_utilities = []
+        c_greedy_utilities = []
         our_utilities = []
 
         # for group_item_pair in candidate_group_items:
@@ -819,7 +841,14 @@ if __name__ == '__main__':
                 ####### random greedy ###############
                 random_utilities.append(evaluate(random_greedy, 'RAN'))
 
+            ###### simple & cost greedy ####
+            s_greedy_utilities.append(evaluate(simple_greedy_baseline, 'S-Greedy'))
+            c_greedy_utilities.append(evaluate(cost_greedy_baseline, 'C-Greedy'))
+
             ###### our method ###################
+            CACHE_UTILITY = {}
+            evaluate(near_opt_group_rec_no_speedup, 'CEIL') # just for time test experiment
+            CACHE_UTILITY = {}
             our_utilities.append(evaluate(near_opt_group_rec, 'CEIL'))
 
         csd_kp_result = get_result_str(csd_greedy_utilities['KP'])
@@ -834,6 +863,8 @@ if __name__ == '__main__':
         tp_kp_result = get_result_str(tp_greedy_utilities['KP'])
         tp_ap_result = get_result_str(tp_greedy_utilities['AP'])
         tp_bu_result = get_result_str(tp_greedy_utilities['BU'])
+        s_greedy_result = get_result_str(s_greedy_utilities)
+        c_greedy_result = get_result_str(c_greedy_utilities)
         rand_result = get_result_str(random_utilities)
         our_result = get_result_str(our_utilities)
 
@@ -845,7 +876,9 @@ if __name__ == '__main__':
         logger.info(tp_result_str)
         csd_result_str = 'CSD: {} {} {}'.format(csd_kp_result, csd_ap_result, csd_bu_result)
         logger.info(csd_result_str)
+        greedy_result_str = 'S-Greedy: {} C-Greedy: {}'.format(s_greedy_result, c_greedy_result)
+        logger.info(greedy_result_str)
         our_result_str = 'CEIL: {} RAN: {}'.format(our_result, rand_result)
         logger.info(our_result_str)
-        parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION)
+        parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION.__name__)
         logger.info(parameter_setting)
