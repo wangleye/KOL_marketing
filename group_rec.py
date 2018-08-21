@@ -693,7 +693,7 @@ if __name__ == '__main__':
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
     SCENARIO = 'movie' # book or movie
     alpha = 0.02
-    need_simulation = False
+    need_simulation = True
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
@@ -719,11 +719,12 @@ if __name__ == '__main__':
         print 'start simulation in parallel'
         ppservers = ()
         n_worker = 4
-        job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
+        job_server = pp.Server(n_worker, ppservers=ppservers) # create multiple processes
         k_worker = 250
         # n_worker * k_worker is the number of simulations for each (item, group) pair
         dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-        jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+        jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i),\
+                dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(n_worker)]
         # load cache hit users (may delete)
         for job in jobs:
             hit_users = job()
