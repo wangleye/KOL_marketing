@@ -5,7 +5,8 @@ import math
 import logging
 
 def save_hit_users_to_db(item, group, hit_users, scenario, alpha):
-    insert_statement = "INSERT INTO simulate_group_rec_{} (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')".format(scenario, group, item, ','.join(hit_users), alpha)
+    insert_statement = "INSERT INTO `simulate_group_rec_{}_{}` (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')"\
+                        .format(scenario, "%.2f"%alpha, group, item, ','.join(hit_users), alpha)
     x = conn.cursor()
     x.execute(insert_statement)
 
@@ -43,7 +44,7 @@ def simulate_hit_users_monte_carlo(items, group_users, scenario, alpha, sim_dict
         cache_hit_users[(item,group)] = []
         start = time.clock()
         for k in range(K):
-            this_hit_users = sim_hit_users(item, group_users[group], sim_dict, alpha)
+            this_hit_users = sim_hit_users(item, group_users[group], sim_dict, alpha, scenario)
             cache_hit_users[(item,group)].append(this_hit_users)
             save_hit_users_to_db(item, group, this_hit_users, scenario, alpha)
         # commit to db just K times of simulation ends
@@ -75,13 +76,15 @@ def friends(user_id):
         USER_FRIENDS[user_id] = friend_ids
         return friend_ids
 
-def sim_to_hit_prob(sim):
+def sim_to_hit_prob(sim, scenario):
     # learned logistic / isonotic function
-    # return 1.0/(1.0+math.exp(-(-4.103+1.607*sim))) # for movie (con)
-    return 1.0/(1.0+math.exp(-(-5.233+5.972*sim))) # for book (con_v2_norm)
+    if scenario == 'movie':
+        return 1.0/(1.0+math.exp(-(-4.103+1.607*sim))) # for movie (con)
+    if scenario == ' book':
+        return 1.0/(1.0+math.exp(-(-5.233+5.972*sim))) # for book (con_v2_norm)
 
 # store the hit users calculated before
-def sim_hit_users(item, users_in_group, sim_dict, alpha):
+def sim_hit_users(item, users_in_group, sim_dict, alpha, scenario):
     """
     simulation to get hit users for calculating utility
     """
@@ -91,7 +94,7 @@ def sim_hit_users(item, users_in_group, sim_dict, alpha):
     for u in users_in_group:
         sim = similarity(item, u, sim_dict)
         if sim > 0:
-            hit_u_p = sim_to_hit_prob(sim)
+            hit_u_p = sim_to_hit_prob(sim, scenario)
             if random.random() <= hit_u_p:
                 hit_users.add(u)
                 if random.random() <= alpha:
@@ -106,7 +109,7 @@ def sim_hit_users(item, users_in_group, sim_dict, alpha):
                     continue
                 sim = similarity(item, f, sim_dict)
                 if sim > 0:
-                    hit_f_p = sim_to_hit_prob(sim)
+                    hit_f_p = sim_to_hit_prob(sim, scenario)
                     if random.random() <= hit_f_p:
                         hit_users.add(f)
                         if random.random() <= alpha:

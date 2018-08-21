@@ -59,7 +59,8 @@ def load_all_simulated_hits():
             load_simulated_hits(group, item)
 
 def load_simulated_hits(group_id, item_id):
-    query_str = "select group_id, item_id, hit_users from simulate_group_rec_{} where alpha between {} and {} and group_id = '{}' and item_id = '{}' limit 1000".format(SCENARIO, alpha-0.001, alpha+0.001, group_id, item_id)
+    query_str = "select group_id, item_id, hit_users from `simulate_group_rec_{}_{}` where group_id = '{}' and item_id = '{}' limit 1000" \
+                .format(SCENARIO, "%.2f"%alpha, group_id, item_id)
     x = conn.cursor()
     x.execute(query_str)
     results = x.fetchall()
@@ -741,14 +742,14 @@ if __name__ == '__main__':
     # test_utility_difference()
     # print 'test utility difference donw'
 
-    candidate_group_items = []
-    for i in range(repeat_times):
-       candidate_group_items.append((load_groups(), load_items()))
+    # candidate_group_items = []
+    # for i in range(repeat_times):
+    #    candidate_group_items.append((load_groups(), load_items()))
 
     # for s in [1, 2]:
     # for bud in [10,]:
-    for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
-    # for item_num, group_num in [(20, 20),]:
+    # for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
+    for item_num, group_num in [(20, 20),]:
         #### for varying item and group numbers
         TEST_GROUP_NUM = group_num
         TEST_ITEM_NUM = item_num
