@@ -36,7 +36,6 @@ SLOT_NUM = 1
 BUDGET = 1
 COST_TYPE = 'number' # 'net' or 'number'
 
-alpha = 0.02
 epsilon = 0.1
 
 DATA_DIR = './facebook'
@@ -686,13 +685,14 @@ def evaluate_utility_estimation_effect():
     print(np.mean(random_estimate))
 
 
-
 if __name__ == '__main__':
 
     # evaluate_utility_estimation_effect()
 
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
     SCENARIO = 'movie' # book or movie
+    alpha = 0.02
+    need_simulation = False
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
@@ -708,22 +708,24 @@ if __name__ == '__main__':
     load_group_costs()
     load_user_item_similarity()
     load_all_items()
-    load_item_revenues()
+    if SCENARIO == 'book':
+        load_item_revenues()
     init_slots(SLOT_NUM)
     initialize_finished = time.clock()
     print 'initialization finished: ', initialize_finished - start, ' seconds'
 
-    # print 'start simulation in parallel'
-    # ppservers = ()
-    # n_worker = 4
-    # job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
-    # k_worker = 250
-    # # n_worker * k_worker is the number of simulations for each (item, group) pair
-    # dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-    # jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
-    # # load cache hit users (may delete)
-    # for job in jobs:
-    #     hit_users = job()
+    if need_simulation:
+        print 'start simulation in parallel'
+        ppservers = ()
+        n_worker = 4
+        job_server = pp.Server(n_worker, ppservers=ppservers) # create 8 processes
+        k_worker = 250
+        # n_worker * k_worker is the number of simulations for each (item, group) pair
+        dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
+        jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i), dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(8)]
+        # load cache hit users (may delete)
+        for job in jobs:
+            hit_users = job()
 
     load_all_simulated_hits()
     simulation_finished = time.clock()
@@ -739,24 +741,24 @@ if __name__ == '__main__':
     # test_utility_difference()
     # print 'test utility difference donw'
 
-    # candidate_group_items = []
-    # for i in range(repeat_times):
-       # candidate_group_items.append((load_groups(), load_items()))
+    candidate_group_items = []
+    for i in range(repeat_times):
+       candidate_group_items.append((load_groups(), load_items()))
 
-    # for s in [1,]:
+    # for s in [1, 2]:
     # for bud in [10,]:
-    for item_num, group_num in [(20, 20), (40, 40), (60, 60), (80, 80), (100, 100)]:
-
+    for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
+    # for item_num, group_num in [(20, 20),]:
         #### for varying item and group numbers
         TEST_GROUP_NUM = group_num
         TEST_ITEM_NUM = item_num
         
-        if TEST_GROUP_NUM == TOTAL_GROUP_NUM:
-             repeat_times = 1
+        if TEST_GROUP_NUM == TOTAL_GROUP_NUM and TEST_ITEM_NUM == TOTAL_ITEM_NUM:
+            repeat_times = 1
         
-        ##### for varying budget
-        #BUDGET = bud/10.0
-        #load_group_costs() # reload cost for normalization
+        #### for varying budget
+        # BUDGET = bud/10.0
+        # load_group_costs() # reload cost for normalization
         
         ##### for varying slots
         # init_slots(s)
