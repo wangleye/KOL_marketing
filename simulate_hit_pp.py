@@ -4,6 +4,12 @@ import time
 import math
 import logging
 
+USER_FRIENDS = {}
+conn = pymysql.connect(host='127.0.0.1',
+        user='root',
+        passwd='123456',
+        db='all0504')
+
 def save_hit_users_to_db(item, group, hit_users, scenario, alpha):
     insert_statement = "INSERT INTO `simulate_group_rec_{}_{}` (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')"\
                         .format(scenario, "%.2f"%alpha, group, item, ','.join(hit_users), alpha)

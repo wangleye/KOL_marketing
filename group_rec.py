@@ -25,6 +25,7 @@ GROUP_USERS = {}
 GROUP_CSD = {}
 GROUP_TP_RANK = {}
 USER_NUM_COSTS = {}
+USER_FRIENDS = {}
 NET_COSTS = {}
 COSTS = {}
 GROUPS = []
@@ -223,11 +224,11 @@ def utility_unit_revenue(hit_users):
         if item in ITEM_REVENUES:
             item_r = ITEM_REVENUES[item]
         else:
-            item_r = 10
+            item_r = 8.97
         revenue += len(hit_users[item]) * item_r
     return revenue
 
-def utility_monte_carlo(rec_pairs):
+def utility_monte_carlo(rec_pairs, use_cache=True):
     K = 1000 # simulation times
     if len(rec_pairs) == 0:
         return 0
@@ -244,8 +245,12 @@ def utility_monte_carlo(rec_pairs):
             hit_users[item] = set() # initialize hit users for any item in recommendations
 
         for (item, group) in rec_pairs:
-            sim_hit_users = CACHE_HIT_USERS[set2key((item, group))][i]
+            if use_cache:
+                sim_hit_users = CACHE_HIT_USERS[set2key((item, group))][i]
+            else:
+                sim_hit_users = sh.sim_hit_users(item, GROUP_USERS[group], SIM, alpha, SCENARIO)
             hit_users[item].update(sim_hit_users)
+
 
         # use the HIT_USERS to calculate utility
         utility_sum += UTILITY_FUNCTION(hit_users)
@@ -353,9 +358,12 @@ def is_over_slot_constraint(selected_recs, slots, group_id):
         return False
 
 def near_opt_group_rec_no_speedup(groups, items, normalized_costs, slots):
-    return near_opt_group_rec(groups, items, normalized_costs, slots, False)
+    return near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = False)
 
-def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True):
+def near_opt_group_rec_no_local_greedy(groups, items, normalized_costs, slots):
+    return near_opt_group_rec(groups, items, normalized_costs, slots, local_greedy = False)
+
+def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True, local_greedy = True):
     M = find_max_utility(groups, items, normalized_costs)
     rho = M*1.0/2
     R = {}
@@ -394,22 +402,24 @@ def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True):
                 utility_increase >= tau and \
                 utility_increase / normalized_costs[g] >= rho:
                     if is_over_budget(S_prime, normalized_costs):
-                        #R[str(rho)] = (S, utility_monte_carlo(S))
-                        # local improvement - using S as base, simple/cost greedy
-                        S_sg, u_sg = simple_greedy(groups, items, normalized_costs, slots, S)
-                        S_cg, u_cg = cost_greedy(groups, items, normalized_costs, slots, S)
-                        if u_sg >= u_cg:
-                            R[str(rho)] = (S_sg, u_sg)
-                        else:
-                            R[str(rho)] = (S_cg, u_cg)
+                        if local_greedy:
+                            # local improvement - using S as base, simple/cost greedy
+                            S_sg, u_sg = simple_greedy(groups, items, normalized_costs, slots, S)
+                            S_cg, u_cg = cost_greedy(groups, items, normalized_costs, slots, S)
+                            if u_sg >= u_cg:
+                                R[str(rho)] = (S_sg, u_sg)
+                            else:
+                                R[str(rho)] = (S_cg, u_cg)
 
-                        #R[str(-rho)] = ({(i,g)}, utility_monte_carlo({(i,g)}))
-                        S_neg_sg, u_neg_sg = simple_greedy(groups, items, normalized_costs, slots, {(i,g)})
-                        S_neg_cg, u_neg_cg = cost_greedy(groups, items, normalized_costs, slots, {(i,g)})
-                        if u_neg_sg >= u_neg_cg:
-                            R[str(-rho)] = (S_neg_sg, u_neg_sg)
+                            S_neg_sg, u_neg_sg = simple_greedy(groups, items, normalized_costs, slots, {(i,g)})
+                            S_neg_cg, u_neg_cg = cost_greedy(groups, items, normalized_costs, slots, {(i,g)})
+                            if u_neg_sg >= u_neg_cg:
+                                R[str(-rho)] = (S_neg_sg, u_neg_sg)
+                            else:
+                                R[str(-rho)] = (S_neg_cg, u_neg_cg)
                         else:
-                            R[str(-rho)] = (S_neg_cg, u_neg_cg)
+                            R[str(rho)] = (S, utility_monte_carlo(S))
+                            R[str(-rho)] = ({(i,g)}, utility_monte_carlo({(i,g)}))
                         # continue with next rho
                     else:
                         S = S_prime
@@ -424,12 +434,16 @@ def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True):
             #R[str(rho)] = (S, utility_monte_carlo(S))
             #R[str(-rho)] = (set(), 0)
             #local improvement
-            S_sg, u_sg = simple_greedy(groups, items, normalized_costs, slots, S)
-            S_cg, u_cg = cost_greedy(groups, items, normalized_costs, slots, S)
-            if u_sg >= u_cg:
-                R[str(rho)] = (S_sg, u_sg)
+            if local_greedy:
+                S_sg, u_sg = simple_greedy(groups, items, normalized_costs, slots, S)
+                S_cg, u_cg = cost_greedy(groups, items, normalized_costs, slots, S)
+                if u_sg >= u_cg:
+                    R[str(rho)] = (S_sg, u_sg)
+                else:
+                    R[str(rho)] = (S_cg, u_cg)
             else:
-                R[str(rho)] = (S_cg, u_cg)
+                R[str(rho)] = (S, utility_monte_carlo(S))
+                R[str(-rho)] = (set(), 0)
 
         rho = (1.0+epsilon) * rho
     return get_max_value_from_R(R)
@@ -649,18 +663,27 @@ def friends(user_id):
         return friend_ids
 
 def get_result_str(result_array):
-    result_str = str(np.mean(np.asarray(result_array)))
+    real_result = 0
+    simulation_result = 0
+    count = 0.0
+    for result in result_array:
+        real_result += result[0]
+        simulation_result += result[1]
+        count += 1.0
+    result_str = str(real_result/count) + '(' + str(simulation_result/count) + ')'
+    # result_str = str(np.mean(np.asarray(result_array)))
     return result_str
 
 def evaluate(test_method, method_name):
     started = time.clock()
     results = test_method(GROUPS, ITEMS, COSTS, SLOTS)
+    simulation_result = float(results[1])
     real_result = simulate_final_utility(results[0])
     print method_name, ":", results, real_result
     # logger.info('CSD greedy: {}'.format(results))
     finished = time.clock()
     print finished - started, ' seconds'
-    return real_result
+    return real_result, simulation_result
 
 
 def test_utility_difference():
@@ -710,15 +733,15 @@ if __name__ == '__main__':
 
     # evaluate_utility_estimation_effect()
 
-    UTILITY_FUNCTION = utility_user_count # utility_user_count, utility_unit_revenue
-    SCENARIO = 'movie' # book or movie
+    UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
+    SCENARIO = 'book' # book or movie
     alpha = 0.02
     need_simulation = False
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler('evaluation_results_{}.log'.format(SCENARIO))
+    fh = logging.FileHandler('evaluation_results_{}2.log'.format(SCENARIO))
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
@@ -753,9 +776,6 @@ if __name__ == '__main__':
     simulation_finished = time.clock()
     print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
 
-    # simulate groups and items
-    repeat_times = 5
-
     # test utility difference
     # print 'test utility difference...'
     # load_items()
@@ -769,14 +789,16 @@ if __name__ == '__main__':
 
     # for s in [1, 2]:
     # for bud in [10,]:
-    # for item_num, group_num in [(100, 20), (100, 40), (100, 60), (100, 80), (100, 100)]:
-    for item_num, group_num in [(100, 100), (80, 80), (60, 60), (40, 40), (20, 20)]:
+    for item_num, group_num in [(50, 20), (50, 40), (50, 60), (50, 80), (50, 100)]:
+    # for item_num, group_num in [(100, 100)]:
         #### for varying item and group numbers
         TEST_GROUP_NUM = group_num
         TEST_ITEM_NUM = item_num
         
         if TEST_GROUP_NUM == TOTAL_GROUP_NUM and TEST_ITEM_NUM == TOTAL_ITEM_NUM:
             repeat_times = 1
+        else:
+            repeat_times = 20
         
         #### for varying budget
         # BUDGET = bud/10.0
@@ -801,6 +823,7 @@ if __name__ == '__main__':
         random_utilities = []
         s_greedy_utilities = []
         c_greedy_utilities = []
+        our_no_local_greedy_utilities = []
         our_utilities = []
 
         # for group_item_pair in candidate_group_items:
@@ -816,39 +839,43 @@ if __name__ == '__main__':
             print 'ITEMS', ITEMS
 
             ###### CSD greedy ###################
-            csd_greedy_utilities['KP'].append(evaluate(CSD_KP, "CSD-KP"))
+            for iii in range(10):
+                csd_greedy_utilities['KP'].append(evaluate(CSD_KP, "CSD-KP"))
             csd_greedy_utilities['AP'].append(evaluate(CSD_AP, "CSD-AP"))
             csd_greedy_utilities['BU'].append(evaluate(CSD_BU, "CSD-BU"))
 
+            ###### user number greedy ############
             for iii in range(10):
-                ###### user number greedy ############
                 as_greedy_utilities['KP'].append(evaluate(AS_KP, "AS-KP"))
             as_greedy_utilities['AP'].append(evaluate(AS_AP, "AS-AP"))
             as_greedy_utilities['BU'].append(evaluate(AS_BU, "AS-BU"))
 
+            ##### network value greedy ########
             for iii in range(10):
-                ##### network value greedy ########
                 nv_greedy_utilities['KP'].append(evaluate(NV_KP, 'NV-KP'))
             nv_greedy_utilities['AP'].append(evaluate(NV_AP, 'NV-AP'))
             nv_greedy_utilities['BU'].append(evaluate(NV_BU, 'NV-BU'))
 
             ##### tp greedy ########
-            tp_greedy_utilities['KP'].append(evaluate(TP_KP, 'TP-KP'))
+            for iii in range(10):
+                tp_greedy_utilities['KP'].append(evaluate(TP_KP, 'TP-KP'))
             tp_greedy_utilities['AP'].append(evaluate(TP_AP, 'TP-AP'))
             tp_greedy_utilities['BU'].append(evaluate(TP_BU, 'TP-BU'))
 
-            for iii in range(10):
+            # for iii in range(10):
                 ####### random greedy ###############
-                random_utilities.append(evaluate(random_greedy, 'RAN'))
+                # random_utilities.append(evaluate(random_greedy, 'RAN'))
 
             ###### simple & cost greedy ####
             s_greedy_utilities.append(evaluate(simple_greedy_baseline, 'S-Greedy'))
             c_greedy_utilities.append(evaluate(cost_greedy_baseline, 'C-Greedy'))
 
             ###### our method ###################
-            CACHE_UTILITY = {}
-            evaluate(near_opt_group_rec_no_speedup, 'CEIL') # just for time test experiment
-            CACHE_UTILITY = {}
+            # CACHE_UTILITY = {}
+            # evaluate(near_opt_group_rec_no_speedup, 'CEIL no lazy evaluation') # just for time test experiment
+            # CACHE_UTILITY = {}
+            our_no_local_greedy_utilities.append(evaluate(near_opt_group_rec_no_local_greedy, 'CEIL (No Local Greedy)'))
+            # CACHE_UTILITY = {}
             our_utilities.append(evaluate(near_opt_group_rec, 'CEIL'))
 
         csd_kp_result = get_result_str(csd_greedy_utilities['KP'])
@@ -865,7 +892,8 @@ if __name__ == '__main__':
         tp_bu_result = get_result_str(tp_greedy_utilities['BU'])
         s_greedy_result = get_result_str(s_greedy_utilities)
         c_greedy_result = get_result_str(c_greedy_utilities)
-        rand_result = get_result_str(random_utilities)
+        # rand_result = get_result_str(random_utilities)
+        our_no_local_greedy_result = get_result_str(our_no_local_greedy_utilities)
         our_result = get_result_str(our_utilities)
 
         as_result_str = 'AS: {} {} {}'.format(as_kp_result, as_ap_result, as_bu_result)
@@ -876,9 +904,11 @@ if __name__ == '__main__':
         logger.info(tp_result_str)
         csd_result_str = 'CSD: {} {} {}'.format(csd_kp_result, csd_ap_result, csd_bu_result)
         logger.info(csd_result_str)
+        # random_result_str = 'RAN: {}'.format(rand_result)
+        # logger.info(random_result_str)
         greedy_result_str = 'S-Greedy: {} C-Greedy: {}'.format(s_greedy_result, c_greedy_result)
         logger.info(greedy_result_str)
-        our_result_str = 'CEIL: {} RAN: {}'.format(our_result, rand_result)
+        our_result_str = 'CEIL: {} CEIL (No Local Greedy): {}'.format(our_result, our_no_local_greedy_result)
         logger.info(our_result_str)
         parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION.__name__)
         logger.info(parameter_setting)
