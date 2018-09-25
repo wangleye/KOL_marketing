@@ -17,8 +17,8 @@ conn = pymysql.connect(host='127.0.0.1',
 TOTAL_GROUP_NUM = 100
 TOTAL_ITEM_NUM = 100
 
-TEST_ITEM_NUM = 20 # the number of items used in the test
-TEST_GROUP_NUM = 20 # the number of groups used in the test
+TEST_ITEM_NUM = TOTAL_ITEM_NUM # the number of items used in the test
+TEST_GROUP_NUM = 60 # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -91,7 +91,7 @@ def load_all_items():
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
-    ALL_ITEMS = ALL_ITEMS[0:TOTAL_ITEM_NUM]
+    ALL_ITEMS = ALL_ITEMS[(100-TOTAL_ITEM_NUM):100]
 
 def load_item_revenues():
     """
@@ -735,13 +735,19 @@ if __name__ == '__main__':
 
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
     SCENARIO = 'book' # book or movie
-    alpha = 0.02
-    need_simulation = False
+    alpha = 0.06
+    need_simulation = True
+    if SCENARIO == 'movie':
+        TOTAL_ITEM_NUM = 100
+    if SCENARIO == 'book':
+        TOTAL_ITEM_NUM = 100
+    TEST_ITEM_NUM = TOTAL_ITEM_NUM
+    TEST_GROUP_NUM = 60
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler('evaluation_results_{}2.log'.format(SCENARIO))
+    fh = logging.FileHandler('evaluation_results_{}_alpha.log'.format(SCENARIO))
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
@@ -781,31 +787,30 @@ if __name__ == '__main__':
     # load_items()
     # load_groups()
     # test_utility_difference()
-    # print 'test utility difference donw'
+    # print 'test utility difference done'
 
-    # candidate_group_items = []
-    # for i in range(repeat_times):
-    #    candidate_group_items.append((load_groups(), load_items()))
+    candidate_group_items = []
+    repeat_times = 5
+    for i in range(repeat_times):
+        candidate_group_items.append((load_groups(), load_items()))
 
-    # for s in [1, 2]:
-    # for bud in [10,]:
-    for item_num, group_num in [(50, 20), (50, 40), (50, 60), (50, 80), (50, 100)]:
-    # for item_num, group_num in [(100, 100)]:
+    for s in [1, 2]:
+    # for bud in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]:
+    # for item_num, group_num in [(TOTAL_ITEM_NUM, 20), (TOTAL_ITEM_NUM, 40), (TOTAL_ITEM_NUM, 60), (TOTAL_ITEM_NUM, 80), (TOTAL_ITEM_NUM, 100)]:
         #### for varying item and group numbers
-        TEST_GROUP_NUM = group_num
-        TEST_ITEM_NUM = item_num
-        
+        # TEST_GROUP_NUM = group_num
+        # TEST_ITEM_NUM = item_num
         if TEST_GROUP_NUM == TOTAL_GROUP_NUM and TEST_ITEM_NUM == TOTAL_ITEM_NUM:
             repeat_times = 1
         else:
-            repeat_times = 20
+            repeat_times = 5
         
         #### for varying budget
-        # BUDGET = bud/10.0
+        # BUDGET = bud
         # load_group_costs() # reload cost for normalization
         
         ##### for varying slots
-        # init_slots(s)
+        init_slots(s)
 
         logger.info('=========== new run ==========')
 
@@ -826,14 +831,14 @@ if __name__ == '__main__':
         our_no_local_greedy_utilities = []
         our_utilities = []
 
-        # for group_item_pair in candidate_group_items:
-        for i in range(repeat_times):
+        for group_item_pair in candidate_group_items:
+        #for i in range(repeat_times):
             # each time re-select the items and groups
-            ITEMS = load_items()
-            GROUPS = load_groups()
+            # ITEMS = load_items()
+            # GROUPS = load_groups()
 
-            # GROUPS = group_item_pair[0]
-            # ITEMS = group_item_pair[1]
+            GROUPS = group_item_pair[0]
+            ITEMS = group_item_pair[1]
 
             print 'GROUPS', GROUPS
             print 'ITEMS', ITEMS

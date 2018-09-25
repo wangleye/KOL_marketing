@@ -86,7 +86,7 @@ def sim_to_hit_prob(sim, scenario):
     # learned logistic / isonotic function
     if scenario == 'movie':
         return 1.0/(1.0+math.exp(-(-4.103+1.607*sim))) # for movie (con)
-    if scenario == ' book':
+    if scenario == 'book':
         return 1.0/(1.0+math.exp(-(-5.233+5.972*sim))) # for book (con_v2_norm)
 
 # store the hit users calculated before
