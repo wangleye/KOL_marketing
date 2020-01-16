@@ -1,5 +1,7 @@
 facebook
 *.csv
+actual_utility*
+estimate_utility*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
