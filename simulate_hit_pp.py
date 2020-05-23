@@ -10,13 +10,13 @@ conn = pymysql.connect(host='127.0.0.1',
         passwd='123456',
         db='all0504')
 
-def save_hit_users_to_db(item, group, hit_users, scenario, alpha):
-    insert_statement = "INSERT INTO `simulate_group_rec_{}_{}` (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')"\
-                        .format(scenario, "%.2f"%alpha, group, item, ','.join(hit_users), alpha)
+def save_hit_users_to_db(item, group, hit_users, scenario, alpha, suffix):
+    insert_statement = "INSERT INTO `simulate_group_rec_{}_{}{}` (group_id, item_id, hit_users, alpha) VALUES ('{}','{}','{}','{}')"\
+                        .format(scenario, "%.2f"%alpha, suffix, group, item, ','.join(hit_users), alpha)
     x = conn.cursor()
     x.execute(insert_statement)
 
-def simulate_hit_users_monte_carlo(items, group_users, scenario, alpha, sim_dict, K, proc_id):
+def simulate_hit_users_monte_carlo(items, group_users, scenario, alpha, sim_dict, K, proc_id, suffix):
     global conn, USER_FRIENDS
     conn = pymysql.connect(host='127.0.0.1',
         user='root',
@@ -52,7 +52,7 @@ def simulate_hit_users_monte_carlo(items, group_users, scenario, alpha, sim_dict
         for k in range(K):
             this_hit_users = sim_hit_users(item, group_users[group], sim_dict, alpha, scenario)
             cache_hit_users[(item,group)].append(this_hit_users)
-            save_hit_users_to_db(item, group, this_hit_users, scenario, alpha)
+            save_hit_users_to_db(item, group, this_hit_users, scenario, alpha, suffix)
         # commit to db just K times of simulation ends
         try:
             conn.commit()

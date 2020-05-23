@@ -128,13 +128,13 @@ def user_item_affinity(user_id, target_item, consider_item=True, consider_friend
     return score
 
 def output_user_item_aff():
-    with open("user_{}_aff_score_100_friend_only_KOL_50000".format(SCENARIO), "w") as outputfile:
+    with open("user_{}_aff_score_100_both_item_friend".format(SCENARIO), "w") as outputfile:
         outputfile.write('user {} score truth\n'.format(SCENARIO))
         for user in USER_SET:
             if user not in USER_PREF:
                 continue
             for item in ITEM_SET:
-                score = user_item_affinity(user, item)
+                score = user_item_affinity(user, item, consider_item=True, consider_friend=True)
                 isTrue = 1 if item in USER_PREF[user] else 0
                 if score > 0:
                     outputfile.write('{} {} {} {}\n'.format(user, item, score, isTrue))
@@ -177,6 +177,6 @@ if __name__ == '__main__':
     print('reading item similarity...')
     ITEM_SIM = read_item_similarity_from_file()
     print('outputing to file...')
-    #output_user_item_aff()
-    output_user_item_aff_only_item()
-    output_user_item_aff_only_friend()
+    output_user_item_aff()
+    #output_user_item_aff_only_item()
+    #output_user_item_aff_only_friend()

@@ -15,13 +15,6 @@ conn = pymysql.connect(host='127.0.0.1',
     passwd='123456',
     db='all0504')
 
-TOTAL_GROUP_NUM = 100
-TOTAL_ITEM_NUM = 50
-
-SIMULATION_TIMES = 500
-
-TEST_ITEM_NUM = TOTAL_ITEM_NUM # the number of items used in the test
-TEST_GROUP_NUM = TOTAL_GROUP_NUM # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -97,7 +90,7 @@ def load_all_items():
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
-    ALL_ITEMS = ALL_ITEMS[0:TOTAL_ITEM_NUM] # select top N items
+    ALL_ITEMS = ALL_ITEMS[50:50+TOTAL_ITEM_NUM] # select top N items
 
 def load_item_revenues():
     """
@@ -119,19 +112,13 @@ def load_items():
     ITEMS = random.sample(ALL_ITEMS, TEST_ITEM_NUM)
     return ITEMS
 
-def load_user_item_similarity():
+def load_user_item_similarity(suffix):
     """
     read an item similarity file
     """
-    read_user_item_similarity_file_line_by_line()
-
-
-def read_user_item_similarity_file_line_by_line():
     global SIM
     global ITEM_FANS
-    # with open("{}/user_{}_aff_score_100_item_only_KOL_complete".format(DATA_DIR, SCENARIO)) as inputfile:
-    with open("{}/user_{}_aff_score_100_only_friend".format(DATA_DIR, SCENARIO)) as inputfile:
-    # with open("{}/user_{}_aff_score_100_only_item".format(DATA_DIR, SCENARIO)) as inputfile:
+    with open("{}/user_{}_aff_score_100{}".format(DATA_DIR, SCENARIO, suffix)) as inputfile:
         first_line = True
         for line in inputfile:
             if first_line:
@@ -539,6 +526,41 @@ def KOL_prefer_greedy(input_groups, items, normalized_costs, slots, sort_referen
             max_utility = utility
     return S, max_utility
 
+def most_popular_item(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
+    S = set()
+    groups = input_groups[:]
+    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=is_reverse)
+    for group in groups: # group id is KOL
+        num_fans = 0
+        best_item = random.choice(items)
+        for item in items: # select the most popular time for the KOL
+            if len(ITEM_FANS[item]) > num_fans:
+                best_item = item
+                num_fans = len(ITEM_FANS[item])
+        new_pair, utility_increase, utility = find_max_utility_increase([group,], [best_item,], normalized_costs, slots, S)
+        if new_pair != None:
+            S = S.union({new_pair})
+            max_utility = utility
+    return S, max_utility
+
+def most_value_item(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
+    S = set()
+    groups = input_groups[:]
+    groups = sorted(groups, key=lambda x: sort_reference[x], reverse=is_reverse)
+    for group in groups: # group id is KOL
+        value = 0
+        best_item = random.choice(items)
+        for item in items: # select the most popular time for the KOL
+            tmp_value = len(ITEM_FANS[item]) * (ITEM_REVENUES[item] if item in ITEM_REVENUES else 1) 
+            if tmp_value > value:
+                best_item = item
+                value = tmp_value
+        new_pair, utility_increase, utility = find_max_utility_increase([group,], [best_item,], normalized_costs, slots, S)
+        if new_pair != None:
+            S = S.union({new_pair})
+            max_utility = utility
+    return S, max_utility
+
 def audience_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse=True):
     S = set()
     groups = input_groups[:]
@@ -571,6 +593,10 @@ def benchmark(input_groups, items, normalized_costs, slots, sort_reference, is_r
         return audience_prefer_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
     if item_select_method == 'BU': # best utility
         return baseline_greedy(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
+    if item_select_method == 'POP': # most popular
+        return most_popular_item(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
+    if item_select_method == 'VAL': # most value
+        return most_value_item(input_groups, items, normalized_costs, slots, sort_reference, is_reverse)
 
 def CSD_KP(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, GROUP_CSD, True, 'KP')
@@ -590,6 +616,12 @@ def AS_AP(input_groups, items, normalized_costs, slots):
 def AS_BU(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'BU')
 
+def AS_POP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'POP')
+
+def AS_VAL(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, USER_NUM_COSTS, True, 'VAL')
+
 def NV_KP(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'KP')
 
@@ -598,6 +630,12 @@ def NV_AP(input_groups, items, normalized_costs, slots):
 
 def NV_BU(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'BU')
+
+def NV_POP(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'POP')
+
+def NV_VAL(input_groups, items, normalized_costs, slots):
+    return benchmark(input_groups, items, normalized_costs, slots, NET_COSTS, True, 'VAL')
 
 def TP_KP(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'KP')
@@ -609,7 +647,7 @@ def TP_BU(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'BU')
 
 # for simulating final results
-def simulate_final_utility(rec_pairs, simulation_times=SIMULATION_TIMES):
+def simulate_final_utility(rec_pairs, simulation_times=1000):
     utility_sum = 0
     for i in range(simulation_times):
         hit_users = {}
@@ -756,13 +794,22 @@ def evaluate_utility_estimation_effect():
 
 if __name__ == '__main__':
     # evaluate_utility_estimation_effect()
+    TOTAL_GROUP_NUM = 100
+    TOTAL_ITEM_NUM = 50
+    SIMULATION_TIMES = 500
 
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
-    SCENARIO = 'movie' # book or movie
-    alpha = 0.06
+    SCENARIO = 'book' # book or movie
+    alpha = 0.02
+    p = 0.6
     need_simulation = False
     TEST_ITEM_NUM = TOTAL_ITEM_NUM
-    TEST_GROUP_NUM = TOTAL_GROUP_NUM
+    TEST_GROUP_NUM = int(TOTAL_GROUP_NUM * p)
+    suffix = '' # adoption model
+    # suffix: '_both' --> network-based similarity adoption (both item and friend)
+    # suffix: _only_item --> adoption with item-similairty
+    # suffix: _only_friend --> adoption with friendship
+
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
@@ -776,7 +823,7 @@ if __name__ == '__main__':
     start = time.clock()
     load_group_users_and_csd()
     load_group_costs()
-    load_user_item_similarity()
+    load_user_item_similarity(suffix)
     load_all_items()
     if SCENARIO == 'book':
         load_item_revenues()
@@ -792,7 +839,7 @@ if __name__ == '__main__':
         k_worker = int(SIMULATION_TIMES/n_worker)
         # n_worker * k_worker is the number of simulations for each (item, group) pair
         dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
-        jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i),\
+        jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i, suffix),\
                 dependent_funcs, ("math","random","time","pymysql","logging")) for i in range(n_worker)]
         # load cache hit users (may delete)
         for job in jobs:
@@ -802,28 +849,23 @@ if __name__ == '__main__':
         print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
         sys.exit()
     
-
-    suffix = '_only_item'
-    # suffix: '' --> network-based similarity adoption
-    # suffix: _only_item --> adoption with item-similairty
-    # suffix: _only_friend --> adoption with friendship
-
+  
     load_all_simulated_hits(suffix)
     
-    # test utility difference
-    print 'test utility difference...'
-    load_items()
-    load_groups()
-    test_utility_difference([1,2,3,4], suffix)
-    print 'test utility difference done'
-    sys.exit()
+    # # test utility difference
+    # print 'test utility difference...'
+    # load_items()
+    # load_groups()
+    # test_utility_difference([1,2,3,4], suffix)
+    # print 'test utility difference done'
+    # sys.exit()
 
     candidate_group_items = []
     repeat_times = 5
     for i in range(repeat_times):
         candidate_group_items.append((load_groups(), load_items()))
 
-    for s in [1, 2]:
+    for s in [1, ]:
     # for bud in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]:
     # for item_num, group_num in [(TOTAL_ITEM_NUM, 20), (TOTAL_ITEM_NUM, 40), (TOTAL_ITEM_NUM, 60), (TOTAL_ITEM_NUM, 80), (TOTAL_ITEM_NUM, 100)]:
         #### for varying item and group numbers
@@ -851,8 +893,8 @@ if __name__ == '__main__':
         print 'utility:', UTILITY_FUNCTION
 
         csd_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
-        as_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
-        nv_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
+        as_greedy_utilities = {'KP':[], 'AP':[], 'BU':[], 'POP':[], 'VAL':[]}
+        nv_greedy_utilities = {'KP':[], 'AP':[], 'BU':[], 'POP':[], 'VAL':[]}
         tp_greedy_utilities = {'KP':[], 'AP':[], 'BU':[]}
         random_utilities = []
         s_greedy_utilities = []
@@ -883,12 +925,16 @@ if __name__ == '__main__':
                 as_greedy_utilities['KP'].append(evaluate(AS_KP, "AS-KP"))
             as_greedy_utilities['AP'].append(evaluate(AS_AP, "AS-AP"))
             as_greedy_utilities['BU'].append(evaluate(AS_BU, "AS-BU"))
+            as_greedy_utilities['POP'].append(evaluate(AS_POP, "AS-POP"))
+            as_greedy_utilities['VAL'].append(evaluate(AS_VAL, "AS-VAL"))
 
             ##### network value greedy ########
             for iii in range(10):
                 nv_greedy_utilities['KP'].append(evaluate(NV_KP, 'NV-KP'))
             nv_greedy_utilities['AP'].append(evaluate(NV_AP, 'NV-AP'))
             nv_greedy_utilities['BU'].append(evaluate(NV_BU, 'NV-BU'))
+            nv_greedy_utilities['POP'].append(evaluate(NV_POP, 'NV-POP'))
+            nv_greedy_utilities['VAL'].append(evaluate(NV_VAL, 'NV-VAL'))
 
             ##### tp greedy ########
             for iii in range(10):
@@ -918,9 +964,13 @@ if __name__ == '__main__':
         as_kp_result = get_result_str(as_greedy_utilities['KP'])
         as_ap_result = get_result_str(as_greedy_utilities['AP'])
         as_bu_result = get_result_str(as_greedy_utilities['BU'])
+        as_pop_result = get_result_str(as_greedy_utilities['POP'])
+        as_val_result = get_result_str(as_greedy_utilities['VAL'])
         nv_kp_result = get_result_str(nv_greedy_utilities['KP'])
         nv_ap_result = get_result_str(nv_greedy_utilities['AP'])
         nv_bu_result = get_result_str(nv_greedy_utilities['BU'])
+        nv_pop_result = get_result_str(nv_greedy_utilities['POP'])
+        nv_val_result = get_result_str(nv_greedy_utilities['VAL'])
         tp_kp_result = get_result_str(tp_greedy_utilities['KP'])
         tp_ap_result = get_result_str(tp_greedy_utilities['AP'])
         tp_bu_result = get_result_str(tp_greedy_utilities['BU'])
@@ -930,9 +980,9 @@ if __name__ == '__main__':
         our_no_local_greedy_result = get_result_str(our_no_local_greedy_utilities)
         our_result = get_result_str(our_utilities)
 
-        as_result_str = 'AS: {} {} {}'.format(as_kp_result, as_ap_result, as_bu_result)
+        as_result_str = 'AS: {} {} {} {} {}'.format(as_kp_result, as_ap_result, as_bu_result, as_pop_result, as_val_result)
         logger.info(as_result_str)
-        nv_result_str = 'NV: {} {} {}'.format(nv_kp_result, nv_ap_result, nv_bu_result)
+        nv_result_str = 'NV: {} {} {} {} {}'.format(nv_kp_result, nv_ap_result, nv_bu_result, nv_pop_result, nv_val_result)
         logger.info(nv_result_str)
         tp_result_str = 'TP: {} {} {}'.format(tp_kp_result, tp_ap_result, tp_bu_result)
         logger.info(tp_result_str)
