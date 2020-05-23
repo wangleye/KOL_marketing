@@ -6,7 +6,8 @@ import math
 import pp
 import simulate_hit_pp as sh
 import logging
-from joblib import Parallel, delayed
+import sys
+# from joblib import Parallel, delayed
 
 
 conn = pymysql.connect(host='127.0.0.1',
@@ -15,10 +16,12 @@ conn = pymysql.connect(host='127.0.0.1',
     db='all0504')
 
 TOTAL_GROUP_NUM = 100
-TOTAL_ITEM_NUM = 100
+TOTAL_ITEM_NUM = 50
+
+SIMULATION_TIMES = 500
 
 TEST_ITEM_NUM = TOTAL_ITEM_NUM # the number of items used in the test
-TEST_GROUP_NUM = 60 # the number of groups used in the test
+TEST_GROUP_NUM = TOTAL_GROUP_NUM # the number of groups used in the test
 
 SIM = {} # dictionary / numpy matrix to store the item similarity matrix
 GROUP_USERS = {}
@@ -52,7 +55,7 @@ def init_slots(k):
     for group in GROUP_USERS:
         SLOTS[group] = k
 
-def load_all_simulated_hits():
+def load_all_simulated_hits(suffix=''):
     groups = GROUP_USERS.keys()
     items = ALL_ITEMS
     print 'group len:', len(groups), 'item len:', len(items)
@@ -60,11 +63,14 @@ def load_all_simulated_hits():
     for idx, group in enumerate(groups):
         print idx, group
         for item in items:
-            load_simulated_hits(group, item)
+            load_simulated_hits(group, item, suffix)
 
-def load_simulated_hits(group_id, item_id):
-    query_str = "select group_id, item_id, hit_users from `simulate_group_rec_{}_{}` where group_id = '{}' and item_id = '{}' limit 1000" \
-                .format(SCENARIO, "%.2f"%alpha, group_id, item_id)
+def load_simulated_hits(group_id, item_id, suffix):
+    # suffix: '' --> network-based similarity adoption
+    # suffix: _only_item --> adoption with item-similairty
+    # suffix: _only_friend --> adoption with friendship
+    query_str = "select group_id, item_id, hit_users from `simulate_group_rec_{}_{}{}` where group_id = '{}' and item_id = '{}' limit 1000" \
+                .format(SCENARIO, "%.2f"%alpha, suffix, group_id, item_id)
     x = conn.cursor()
     x.execute(query_str)
     results = x.fetchall()
@@ -91,7 +97,7 @@ def load_all_items():
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
-    ALL_ITEMS = ALL_ITEMS[(100-TOTAL_ITEM_NUM):100]
+    ALL_ITEMS = ALL_ITEMS[0:TOTAL_ITEM_NUM] # select top N items
 
 def load_item_revenues():
     """
@@ -123,7 +129,9 @@ def load_user_item_similarity():
 def read_user_item_similarity_file_line_by_line():
     global SIM
     global ITEM_FANS
-    with open("{}/user_{}_aff_score_100_item_only_KOL_complete".format(DATA_DIR, SCENARIO)) as inputfile:
+    # with open("{}/user_{}_aff_score_100_item_only_KOL_complete".format(DATA_DIR, SCENARIO)) as inputfile:
+    with open("{}/user_{}_aff_score_100_only_friend".format(DATA_DIR, SCENARIO)) as inputfile:
+    # with open("{}/user_{}_aff_score_100_only_item".format(DATA_DIR, SCENARIO)) as inputfile:
         first_line = True
         for line in inputfile:
             if first_line:
@@ -229,7 +237,7 @@ def utility_unit_revenue(hit_users):
     return revenue
 
 def utility_monte_carlo(rec_pairs, use_cache=True):
-    K = 1000 # simulation times
+    K = SIMULATION_TIMES # simulation times
     if len(rec_pairs) == 0:
         return 0
 
@@ -601,7 +609,7 @@ def TP_BU(input_groups, items, normalized_costs, slots):
     return benchmark(input_groups, items, normalized_costs, slots, GROUP_TP_RANK, False, 'BU')
 
 # for simulating final results
-def simulate_final_utility(rec_pairs, simulation_times=10000):
+def simulate_final_utility(rec_pairs, simulation_times=SIMULATION_TIMES):
     utility_sum = 0
     for i in range(simulation_times):
         hit_users = {}
@@ -686,26 +694,43 @@ def evaluate(test_method, method_name):
     return real_result, simulation_result
 
 
-def test_utility_difference():
+def test_utility_difference(group_sizes, suffix):
     uitlity_est_vector = []
     utility_act_vector = []
-    for item in ITEMS:
-        print item
-        for group in GROUPS:
-            utility_est = utility_monte_carlo([(item, group),])
-            utility_act = simulate_final_utility([(item, group),])
-            uitlity_est_vector.append(utility_est*1.0/len(GROUP_USERS[group]))
-            utility_act_vector.append(utility_act*1.0/len(GROUP_USERS[group]))
+
+    if 1 in group_sizes:
+        group_sizes.remove(1)
+        for item in ITEMS:
+            print item
+            for group in GROUPS:
+                utility_est = utility_monte_carlo([(item, group),])
+                utility_act = simulate_final_utility([(item, group),])
+                uitlity_est_vector.append(utility_est)
+                utility_act_vector.append(utility_act)
+
+    for each_size in group_sizes:
+        for i in range(10000): # random sample times
+            if i%100 == 0:
+                print each_size, i
+            selected_pairs = []
+            for _ in range(each_size):
+                item = random.choice(ITEMS)
+                group = random.choice(GROUPS)
+                selected_pairs.append((item, group))
+            utility_est = utility_monte_carlo(selected_pairs)
+            utility_act = simulate_final_utility(selected_pairs)
+            uitlity_est_vector.append(utility_est)
+            utility_act_vector.append(utility_act)
 
     uitlity_est_vector = np.array(uitlity_est_vector)
     utility_act_vector = np.array(utility_act_vector)
 
-    print 'mean utility_est_vector', np.mean(uitlity_est_vector)
-    print 'mean utility_act_vector', np.mean(utility_act_vector)
-    print 'mean difference', np.mean(np.abs(uitlity_est_vector-utility_act_vector))
+    # print 'mean utility_est_vector', np.mean(uitlity_est_vector)
+    # print 'mean utility_act_vector', np.mean(utility_act_vector)
+    # print 'mean difference', np.mean(np.abs(uitlity_est_vector-utility_act_vector))
 
-    np.savetxt('estimate_utility', uitlity_est_vector)
-    np.savetxt('actual_utility', utility_act_vector)
+    np.savetxt('estimate_utility_{}_{}{}'.format(SCENARIO, alpha, suffix), uitlity_est_vector)
+    np.savetxt('actual_utility_{}_{}{}'.format(SCENARIO, alpha, suffix), utility_act_vector)
 
 
 def evaluate_utility_estimation_effect():
@@ -730,19 +755,14 @@ def evaluate_utility_estimation_effect():
 
 
 if __name__ == '__main__':
-
     # evaluate_utility_estimation_effect()
 
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
-    SCENARIO = 'book' # book or movie
+    SCENARIO = 'movie' # book or movie
     alpha = 0.06
-    need_simulation = True
-    if SCENARIO == 'movie':
-        TOTAL_ITEM_NUM = 100
-    if SCENARIO == 'book':
-        TOTAL_ITEM_NUM = 100
+    need_simulation = False
     TEST_ITEM_NUM = TOTAL_ITEM_NUM
-    TEST_GROUP_NUM = 60
+    TEST_GROUP_NUM = TOTAL_GROUP_NUM
 
     # initialize logger file
     logger = logging.getLogger("evaluation_facebook")
@@ -767,9 +787,9 @@ if __name__ == '__main__':
     if need_simulation:
         print 'start simulation in parallel'
         ppservers = ()
-        n_worker = 8
+        n_worker = 4
         job_server = pp.Server(n_worker, ppservers=ppservers) # create multiple processes
-        k_worker = int(1000/n_worker)
+        k_worker = int(SIMULATION_TIMES/n_worker)
         # n_worker * k_worker is the number of simulations for each (item, group) pair
         dependent_funcs = (sh.sim_hit_users, sh.similarity, sh.friends, sh.sim_to_hit_prob, sh.save_hit_users_to_db)
         jobs = [job_server.submit(sh.simulate_hit_users_monte_carlo,(ALL_ITEMS, GROUP_USERS, SCENARIO, alpha, SIM, k_worker, i),\
@@ -778,16 +798,25 @@ if __name__ == '__main__':
         for job in jobs:
             hit_users = job()
 
-    load_all_simulated_hits()
-    simulation_finished = time.clock()
-    print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
+        simulation_finished = time.clock()
+        print 'simulation ended', simulation_finished - initialize_finished, 'seconds'
+        sys.exit()
+    
 
+    suffix = '_only_item'
+    # suffix: '' --> network-based similarity adoption
+    # suffix: _only_item --> adoption with item-similairty
+    # suffix: _only_friend --> adoption with friendship
+
+    load_all_simulated_hits(suffix)
+    
     # test utility difference
-    # print 'test utility difference...'
-    # load_items()
-    # load_groups()
-    # test_utility_difference()
-    # print 'test utility difference done'
+    print 'test utility difference...'
+    load_items()
+    load_groups()
+    test_utility_difference([1,2,3,4], suffix)
+    print 'test utility difference done'
+    sys.exit()
 
     candidate_group_items = []
     repeat_times = 5
