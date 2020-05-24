@@ -33,7 +33,6 @@ USER_FRIENDS = {}
 SLOTS = {}
 SLOT_NUM = 1
 BUDGET = 1
-COST_TYPE = 'number' # 'net' or 'number'
 
 epsilon = 0.1
 
@@ -90,7 +89,11 @@ def load_all_items():
             if len(line.strip()) > 0:
                 item, item_count = line.split()
                 ALL_ITEMS.append(item)
-    ALL_ITEMS = ALL_ITEMS[50:50+TOTAL_ITEM_NUM] # select top N items
+
+    start = 0
+    if SCENARIO == 'book':
+        start = 50
+    ALL_ITEMS = ALL_ITEMS[start:start+TOTAL_ITEM_NUM] # select top N items
 
 def load_item_revenues():
     """
@@ -142,18 +145,32 @@ def load_user_item_similarity(suffix):
                 if is_true_like == 1:
                     ITEM_FANS[item].add(user)
 
-def load_group_costs():
+def load_group_item_costs():
     """
     return group costs from file
     """
     global COSTS
+    max_cost = 0
     with open("{}/KOL_number_cost".format(DATA_DIR)) as inputfile:
         for line in inputfile:
             if len(line.strip()) > 0:
                 words = line.strip().split(';')
                 group_id = words[0]
-                normalized_cost = float(words[1])/BUDGET
-                USER_NUM_COSTS[group_id] = normalized_cost
+                #normalized_cost = float(words[1])/BUDGET
+                group_cost = float(words[1])
+                USER_NUM_COSTS[group_id] = group_cost
+                COSTS[group_id] = {}
+                for item_id in ALL_ITEMS:
+                    if SCENARIO == 'book':
+                        cur_cost = group_cost * ITEM_REVENUES[item_id] if item_id in ITEM_REVENUES else 9.99 # media book price is 9.99
+                    else:
+                        cur_cost = group_cost
+                    COSTS[group_id][item_id] = cur_cost
+                    if cur_cost > max_cost:
+                        max_cost = cur_cost
+    for group_id in COSTS:
+        for item_id in COSTS[group_id]:
+            COSTS[group_id][item_id] = COSTS[group_id][item_id]/(max_cost*BUDGET) # normalization
 
     with open("{}/KOL_net_cost".format(DATA_DIR)) as inputfile:
         for line in inputfile:
@@ -162,11 +179,6 @@ def load_group_costs():
                 group_id = words[0]
                 normalized_cost = float(words[1])/BUDGET
                 NET_COSTS[group_id] = normalized_cost
-
-    if COST_TYPE == 'num':
-        COSTS = USER_NUM_COSTS
-    else:
-        COSTS = NET_COSTS
 
 def load_group_users_and_csd():
     """
@@ -223,13 +235,14 @@ def utility_unit_revenue(hit_users):
         revenue += len(hit_users[item]) * item_r
     return revenue
 
-def utility_monte_carlo(rec_pairs, use_cache=True):
-    K = SIMULATION_TIMES # simulation times
+def utility_monte_carlo(rec_pairs, use_cache_utility=True, K=0):
+    if K == 0:
+        K = SIMULATION_TIMES # simulation times
     if len(rec_pairs) == 0:
         return 0
 
     # if in the utility cache, directly obtain it
-    if set2key(rec_pairs) in CACHE_UTILITY:
+    if use_cache_utility and set2key(rec_pairs) in CACHE_UTILITY:
         return CACHE_UTILITY[set2key(rec_pairs)]
 
     utility_sum = 0
@@ -240,10 +253,7 @@ def utility_monte_carlo(rec_pairs, use_cache=True):
             hit_users[item] = set() # initialize hit users for any item in recommendations
 
         for (item, group) in rec_pairs:
-            if use_cache:
-                sim_hit_users = CACHE_HIT_USERS[set2key((item, group))][i]
-            else:
-                sim_hit_users = sh.sim_hit_users(item, GROUP_USERS[group], SIM, alpha, SCENARIO)
+            sim_hit_users = random.choice(CACHE_HIT_USERS[set2key((item, group))])
             hit_users[item].update(sim_hit_users)
 
 
@@ -252,27 +262,28 @@ def utility_monte_carlo(rec_pairs, use_cache=True):
     utility = utility_sum * 1.0 / K
 
     # save to cache
-    CACHE_UTILITY[set2key(rec_pairs)] = utility
+    if use_cache_utility:
+        CACHE_UTILITY[set2key(rec_pairs)] = utility
 
     return utility
 
 def find_max_utility(groups, items, costs, rho=0):
     max_utility = 0
     for g in groups:
-        if COSTS[g] > 1:
-            continue
         for i in items:
+            if costs[g][i] > 1:
+                continue
             recommend_pairs = {(i,g)} # initialize a set containing only one recommendation
             utility_ig = utility_monte_carlo(recommend_pairs)
             #print '({},{}): {}'.format(i,g,utility_ig)
-            if utility_ig > max_utility and (rho == 0 or utility_ig*1.0/costs[g] >= rho):
+            if utility_ig > max_utility and (rho == 0 or utility_ig*1.0/costs[g][i] >= rho):
                 max_utility = utility_ig
     return max_utility
 
 def sum_cost(costs, selected_pairs):
     sum_c = 0
     for (i, g) in selected_pairs:
-        sum_c += costs[g]
+        sum_c += costs[g][i]
     return sum_c
 
 def find_max_utility_increase(groups, items, costs, slots, selected_pairs):
@@ -281,9 +292,11 @@ def find_max_utility_increase(groups, items, costs, slots, selected_pairs):
     max_pair = None
     max_utility = 0
     for g in groups:
-        if costs[g] > remain_cost or (not still_has_slot(selected_pairs, slots, g)):
+        if not still_has_slot(selected_pairs, slots, g):
             continue
         for i in items:
+            if costs[g][i] > remain_cost:
+                continue
             recommend_pair = {(i,g)}
             utility_ig = utility_monte_carlo(recommend_pair.union(selected_pairs)) - utility_monte_carlo(selected_pairs)
             if utility_ig > max_utility_increase:
@@ -299,12 +312,14 @@ def find_max_utility_per_cost_increase(groups, items, costs, slots, selected_pai
     max_utility = 0
     max_pair = None
     for g in groups:
-        if costs[g] > remain_cost or (not still_has_slot(selected_pairs, slots, g)):
+        if not still_has_slot(selected_pairs, slots, g):
             continue
         for i in items:
+            if costs[g][i] > remain_cost:
+                continue
             recommend_pair = {(i,g)}
             utility_ig = utility_monte_carlo(recommend_pair.union(selected_pairs)) - utility_monte_carlo(selected_pairs)
-            utility_ig_per_cost = utility_ig * 1.0 / costs[g]
+            utility_ig_per_cost = utility_ig * 1.0 / costs[g][i]
             if utility_ig_per_cost > max_utility_increase_per_cost:
                 max_utility_increase_per_cost = utility_ig_per_cost
                 max_pair = (i,g)
@@ -318,7 +333,7 @@ def is_over_budget(selected_recs, normalized_costs):
     """
     sum_cost = 0
     for (item, group) in selected_recs:
-        sum_cost += normalized_costs[group]
+        sum_cost += normalized_costs[group][item]
     if sum_cost > 1:
         return True
     else:
@@ -386,7 +401,7 @@ def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True, 
             for i, g in candidates:
                 # lazy evaluation (speed-up)
                 utility_increase_max = last_utility_increase[(i,g)]
-                if (i, g) in S or utility_increase_max < tau or utility_increase_max / normalized_costs[g] < rho or normalized_costs[g] > 1:
+                if (i, g) in S or utility_increase_max < tau or utility_increase_max / normalized_costs[g][i] < rho or normalized_costs[g][i] > 1:
                     continue
 
                 S_prime = S.union({(i,g)})
@@ -395,7 +410,7 @@ def near_opt_group_rec(groups, items, normalized_costs, slots, speed_up = True, 
                     last_utility_increase[(i,g)] = utility_increase
                 if not is_over_slot_constraint(S_prime, slots, g) and \
                 utility_increase >= tau and \
-                utility_increase / normalized_costs[g] >= rho:
+                utility_increase / normalized_costs[g][i] >= rho:
                     if is_over_budget(S_prime, normalized_costs):
                         if local_greedy:
                             # local improvement - using S as base, simple/cost greedy
@@ -723,8 +738,9 @@ def get_result_str(result_array):
 def evaluate(test_method, method_name):
     started = time.clock()
     results = test_method(GROUPS, ITEMS, COSTS, SLOTS)
-    simulation_result = float(results[1])
-    real_result = simulate_final_utility(results[0])
+    simulation_result = utility_monte_carlo(results[0], K=1000, use_cache_utility=False) # simulation enough times again to get result
+    # simulation_result = float(results[1])
+    real_result = simulate_final_utility(results[0], simulation_times=1000)
     print method_name, ":", results, real_result
     # logger.info('CSD greedy: {}'.format(results))
     finished = time.clock()
@@ -794,6 +810,7 @@ def evaluate_utility_estimation_effect():
 
 if __name__ == '__main__':
     # evaluate_utility_estimation_effect()
+    
     TOTAL_GROUP_NUM = 100
     TOTAL_ITEM_NUM = 50
     SIMULATION_TIMES = 500
@@ -801,7 +818,7 @@ if __name__ == '__main__':
     UTILITY_FUNCTION = utility_unit_revenue # utility_user_count, utility_unit_revenue
     SCENARIO = 'book' # book or movie
     alpha = 0.02
-    p = 0.6
+    p = 1
     need_simulation = False
     TEST_ITEM_NUM = TOTAL_ITEM_NUM
     TEST_GROUP_NUM = int(TOTAL_GROUP_NUM * p)
@@ -822,11 +839,13 @@ if __name__ == '__main__':
 
     start = time.clock()
     load_group_users_and_csd()
-    load_group_costs()
-    load_user_item_similarity(suffix)
     load_all_items()
     if SCENARIO == 'book':
         load_item_revenues()
+    load_group_item_costs()
+    load_user_item_similarity(suffix)
+    
+
     init_slots(SLOT_NUM)
     initialize_finished = time.clock()
     print 'initialization finished: ', initialize_finished - start, ' seconds'
@@ -862,6 +881,7 @@ if __name__ == '__main__':
 
     candidate_group_items = []
     repeat_times = 5
+    random.seed(1537) # ensure reproductivity for the loaded groups and items
     for i in range(repeat_times):
         candidate_group_items.append((load_groups(), load_items()))
 
@@ -871,10 +891,6 @@ if __name__ == '__main__':
         #### for varying item and group numbers
         # TEST_GROUP_NUM = group_num
         # TEST_ITEM_NUM = item_num
-        if TEST_GROUP_NUM == TOTAL_GROUP_NUM and TEST_ITEM_NUM == TOTAL_ITEM_NUM:
-            repeat_times = 1
-        else:
-            repeat_times = 5
         
         #### for varying budget
         # BUDGET = bud
@@ -994,5 +1010,6 @@ if __name__ == '__main__':
         logger.info(greedy_result_str)
         our_result_str = 'CEIL: {} CEIL (No Local Greedy): {}'.format(our_result, our_no_local_greedy_result)
         logger.info(our_result_str)
-        parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, cost: {}, utility: {}'.format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, COST_TYPE, UTILITY_FUNCTION.__name__)
+        parameter_setting = 'groups: {}, items: {}, budget {}, alpha: {}, slots: {}, utility: {}, simulation: {}, adoption_suffix: {}'\
+            .format(TEST_GROUP_NUM, TEST_ITEM_NUM, BUDGET, alpha, SLOT_NUM, UTILITY_FUNCTION.__name__, SIMULATION_TIMES, suffix)
         logger.info(parameter_setting)
